@@ -55,8 +55,11 @@ dotfiles init
 # Check platform information
 dotfiles info
 
-# Install dotfiles and packages
-dotfiles install
+# Apply dotfiles configuration
+dotfiles apply
+
+# Update to latest version
+dotfiles update
 ```
 
 ## Usage
@@ -64,8 +67,9 @@ dotfiles install
 ### Commands
 
 - `dotfiles init` - Initialize a new dotfiles repository
-- `dotfiles install` - Install dotfiles and packages
-- `dotfiles update` - Update existing installation
+- `dotfiles apply` - Apply dotfiles configuration (symlinks, packages, scripts)
+- `dotfiles update` - Update dotfiles manager to latest version
+- `dotfiles update --check` - Check for updates without installing
 - `dotfiles info` - Show platform and environment information
 - `dotfiles version` - Show version information
 
@@ -76,7 +80,7 @@ dotfiles install
 
 ## Configuration
 
-The dotfiles manager uses a `dotfiles.yaml` configuration file:
+The dotfiles manager uses a `dotfiles.yaml` configuration file that defines what happens when you run `dotfiles apply`:
 
 ```yaml
 metadata:
@@ -86,29 +90,29 @@ metadata:
   description: "Personal dotfiles configuration"
 
 settings:
-  backup_dir: "~/.dotfiles-backup"
-  template_dir: "templates"
-  target_dir: "~"
+  backup_dir: "~/.dotfiles-backup"    # Where to backup existing files
+  template_dir: "templates"           # Directory containing template files
+  target_dir: "~"                     # Base directory for file placement
   log_level: "info"
 
 variables:
-  git_user: "Your Name"
+  git_user: "Your Name"               # Variables available in templates
   git_email: "your.email@example.com"
 
 platforms:
   - name: "windows"
     conditions:
       os: "windows"
-    packages:
+    packages:                         # Installed via package managers
       chocolatey:
         - git
         - vscode
       winget:
         - Microsoft.PowerShell
-    files:
+    files:                           # Files to create/symlink
       - source: "templates/powershell/profile.ps1.tmpl"
         target: "~/Documents/PowerShell/Microsoft.PowerShell_profile.ps1"
-        template: true
+        template: true               # Process as Go template
         
   - name: "macos"
     conditions:
@@ -134,6 +138,13 @@ platforms:
         target: "~/.bashrc"
         template: true
 ```
+
+When you run `dotfiles apply`, the manager will:
+1. **Detect your platform** (OS, shell, available package managers)
+2. **Install packages** using the appropriate package manager
+3. **Process templates** and create configuration files
+4. **Create symlinks** or copy files to target locations
+5. **Backup existing files** before making changes
 
 ## Templating
 
@@ -260,10 +271,31 @@ go run build.go -install     # Build and install to GOPATH/bin
 go run build.go -deps        # Download dependencies
 ```
 
-**Installation Methods:**
-- **Direct**: `go install github.com/vleeuwenmenno/dotfiles-cp/cmd/dotfiles@latest`
+**Installation & Updates:**
+- **Install**: `go install github.com/vleeuwenmenno/dotfiles-cp/cmd/dotfiles@latest`
+- **Update**: `dotfiles update` (or re-run the install command)
 - **Development**: `go run build.go -install` (from source)
 - **Binary**: Download from releases page
+
+**Update Methods:**
+```bash
+# Method 1: Use built-in update command (requires Go)
+dotfiles update
+
+# Method 2: Check for updates without installing
+dotfiles update --check
+
+# Method 3: Re-run install command
+go install github.com/vleeuwenmenno/dotfiles-cp/cmd/dotfiles@latest
+
+# Method 4: Install specific version
+go install github.com/vleeuwenmenno/dotfiles-cp/cmd/dotfiles@v1.0.0
+```
+
+**Note**: The `dotfiles update` command requires Go to be installed. If you don't have Go installed, you can:
+- Download the latest binary from the releases page
+- Install Go and then use the update command
+- Use a package manager like Homebrew, Chocolatey, etc. (when available)
 
 ## Roadmap
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"os/exec"
 
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/logger"
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/platform"
@@ -85,22 +86,62 @@ package management integration, and works seamlessly across Windows, macOS, and 
 		},
 	}
 
-	// Add install command placeholder
-	installCmd := &cobra.Command{
-		Use:   "install",
-		Short: "Install dotfiles and packages",
+	// Add apply command placeholder
+	applyCmd := &cobra.Command{
+		Use:   "apply",
+		Short: "Apply dotfiles configuration (symlinks, packages, scripts)",
 		Run: func(cmd *cobra.Command, args []string) {
 			log := logger.Get()
-			log.Info().Msg("Installing dotfiles...")
+			log.Info().Msg("Applying dotfiles configuration...")
 			log.Warn().Msg("Command not yet implemented")
 		},
 	}
+
+	// Add update command
+	updateCmd := &cobra.Command{
+		Use:   "update",
+		Short: "Update dotfiles manager to the latest version",
+		Long: `Update the dotfiles manager by running 'go install' with the latest version.
+This requires Go to be installed on your system.
+
+Use --check to only check for updates without installing.`,
+		Run: func(cmd *cobra.Command, args []string) {
+			log := logger.Get()
+
+			checkOnly, _ := cmd.Flags().GetBool("check")
+
+			if checkOnly {
+				log.Info().Msg("Checking for updates...")
+				log.Info().Str("current_version", version).Str("current_commit", commit).Msg("Current version")
+				log.Info().Msg("To check for the latest version, visit: https://github.com/vleeuwenmenno/dotfiles-cp/releases")
+				log.Info().Msg("To update, run: dotfiles update")
+				return
+			}
+
+			log.Info().Msg("Updating dotfiles manager...")
+
+			updateCmd := exec.Command("go", "install", "github.com/vleeuwenmenno/dotfiles-cp/cmd/dotfiles@latest")
+			updateCmd.Stdout = os.Stdout
+			updateCmd.Stderr = os.Stderr
+
+			if err := updateCmd.Run(); err != nil {
+				log.Error().Err(err).Msg("Failed to update dotfiles manager")
+				log.Info().Msg("Make sure Go is installed and you have internet connectivity")
+				os.Exit(1)
+			}
+
+			log.Info().Msg("Update completed successfully!")
+			log.Info().Msg("You may need to restart your terminal or run 'hash -r' to refresh the binary")
+		},
+	}
+	updateCmd.Flags().Bool("check", false, "Only check for updates without installing")
 
 	// Add commands to root
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(infoCmd)
 	rootCmd.AddCommand(initCmd)
-	rootCmd.AddCommand(installCmd)
+	rootCmd.AddCommand(applyCmd)
+	rootCmd.AddCommand(updateCmd)
 
 	// Execute the root command
 	if err := rootCmd.Execute(); err != nil {
