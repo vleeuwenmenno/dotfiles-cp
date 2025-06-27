@@ -68,6 +68,10 @@ dotfiles update
 
 - `dotfiles init` - Initialize a new dotfiles repository
 - `dotfiles apply` - Apply dotfiles configuration (symlinks, packages, scripts)
+- `dotfiles backup` - Backup current configuration files
+- `dotfiles restore` - Restore configuration files from backup
+- `dotfiles status` - Show status of dotfiles configuration
+- `dotfiles validate` - Validate dotfiles configuration file
 - `dotfiles update` - Update dotfiles manager to latest version
 - `dotfiles update --check` - Check for updates without installing
 - `dotfiles info` - Show platform and environment information
@@ -302,11 +306,14 @@ go install github.com/vleeuwenmenno/dotfiles-cp/cmd/dotfiles@v1.0.0
 - [x] Cross-platform build system
 - [x] Platform detection and logging
 - [x] Basic CLI structure with Cobra
+- [x] Self-update functionality
+- [x] Command structure for all major operations
+- [ ] Configuration file parsing and validation
 - [ ] Templating engine implementation
 - [ ] Package installation logic
 - [ ] File management and symlinking
 - [ ] Backup and restore functionality
-- [ ] Configuration validation
+- [ ] Status checking and diff functionality
 - [ ] Shell integration scripts
 - [ ] CI/CD pipeline
 - [ ] Documentation website

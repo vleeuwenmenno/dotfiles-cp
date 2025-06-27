@@ -97,6 +97,50 @@ package management integration, and works seamlessly across Windows, macOS, and 
 		},
 	}
 
+	// Add backup command
+	backupCmd := &cobra.Command{
+		Use:   "backup",
+		Short: "Backup current configuration files",
+		Run: func(cmd *cobra.Command, args []string) {
+			log := logger.Get()
+			log.Info().Msg("Backing up current configuration...")
+			log.Warn().Msg("Command not yet implemented")
+		},
+	}
+
+	// Add restore command
+	restoreCmd := &cobra.Command{
+		Use:   "restore",
+		Short: "Restore configuration files from backup",
+		Run: func(cmd *cobra.Command, args []string) {
+			log := logger.Get()
+			log.Info().Msg("Restoring configuration from backup...")
+			log.Warn().Msg("Command not yet implemented")
+		},
+	}
+
+	// Add status command
+	statusCmd := &cobra.Command{
+		Use:   "status",
+		Short: "Show status of dotfiles configuration",
+		Run: func(cmd *cobra.Command, args []string) {
+			log := logger.Get()
+			log.Info().Msg("Checking dotfiles status...")
+			log.Warn().Msg("Command not yet implemented")
+		},
+	}
+
+	// Add validate command
+	validateCmd := &cobra.Command{
+		Use:   "validate",
+		Short: "Validate dotfiles configuration file",
+		Run: func(cmd *cobra.Command, args []string) {
+			log := logger.Get()
+			log.Info().Msg("Validating configuration...")
+			log.Warn().Msg("Command not yet implemented")
+		},
+	}
+
 	// Add update command
 	updateCmd := &cobra.Command{
 		Use:   "update",
@@ -141,6 +185,10 @@ Use --check to only check for updates without installing.`,
 	rootCmd.AddCommand(infoCmd)
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(applyCmd)
+	rootCmd.AddCommand(backupCmd)
+	rootCmd.AddCommand(restoreCmd)
+	rootCmd.AddCommand(statusCmd)
+	rootCmd.AddCommand(validateCmd)
 	rootCmd.AddCommand(updateCmd)
 
 	// Execute the root command
