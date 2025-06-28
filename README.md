@@ -5,7 +5,7 @@ A powerful cross-platform dotfiles manager with templating support, built in Go.
 ## Features
 
 - 🚀 **Cross-platform**: Windows 11, macOS, and Linux support
-- 🐚 **Multi-shell**: PowerShell, Bash, ZSH support  
+- 🐚 **Multi-shell**: PowerShell, Bash, ZSH support
 - 📦 **Package managers**: Chocolatey, Winget, Homebrew, APT, YUM/DNF support
 - 🎨 **Templating**: Go templates with conditional logic and variables
 - ⚙️ **Flexible configuration**: YAML-based with platform-specific overrides
@@ -18,11 +18,13 @@ A powerful cross-platform dotfiles manager with templating support, built in Go.
 ### Installation
 
 #### Via Go (Recommended)
+
 ```bash
 go install github.com/vleeuwenmenno/dotfiles-cp/cmd/dotfiles@latest
 ```
 
 **Note**: Make sure `$GOPATH/bin` (or `$GOBIN`) is in your PATH:
+
 ```bash
 # Add to your shell profile (.bashrc, .zshrc, etc.)
 export PATH=$PATH:$(go env GOPATH)/bin
@@ -32,6 +34,7 @@ export PATH=$PATH:$(go env GOPATH)/bin
 ```
 
 #### Build from Source
+
 ```bash
 git clone https://github.com/vleeuwenmenno/dotfiles-cp.git
 cd dotfiles-cp
@@ -44,6 +47,7 @@ go install ./cmd/dotfiles
 ```
 
 #### Download Binary
+
 Download the latest binary from the [releases page](https://github.com/vleeuwenmenno/dotfiles-cp/releases).
 
 ### Initialize Your Dotfiles
@@ -94,30 +98,30 @@ metadata:
   description: "Personal dotfiles configuration"
 
 settings:
-  backup_dir: "~/.dotfiles-backup"    # Where to backup existing files
-  template_dir: "templates"           # Directory containing template files
-  target_dir: "~"                     # Base directory for file placement
+  backup_dir: "~/.dotfiles-backup" # Where to backup existing files
+  template_dir: "templates" # Directory containing template files
+  target_dir: "~" # Base directory for file placement
   log_level: "info"
 
 variables:
-  git_user: "Your Name"               # Variables available in templates
+  git_user: "Your Name" # Variables available in templates
   git_email: "your.email@example.com"
 
 platforms:
   - name: "windows"
     conditions:
       os: "windows"
-    packages:                         # Installed via package managers
+    packages: # Installed via package managers
       chocolatey:
         - git
         - vscode
       winget:
         - Microsoft.PowerShell
-    files:                           # Files to create/symlink
+    files: # Files to create/symlink
       - source: "templates/powershell/profile.ps1.tmpl"
         target: "~/Documents/PowerShell/Microsoft.PowerShell_profile.ps1"
-        template: true               # Process as Go template
-        
+        template: true # Process as Go template
+
   - name: "macos"
     conditions:
       os: "darwin"
@@ -129,7 +133,7 @@ platforms:
       - source: "templates/zsh/zshrc.tmpl"
         target: "~/.zshrc"
         template: true
-        
+
   - name: "linux"
     conditions:
       os: "linux"
@@ -144,6 +148,7 @@ platforms:
 ```
 
 When you run `dotfiles apply`, the manager will:
+
 1. **Detect your platform** (OS, shell, available package managers)
 2. **Install packages** using the appropriate package manager
 3. **Process templates** and create configuration files
@@ -173,16 +178,19 @@ export GIT_EMAIL="{{ .Variables.git_email }}"
 ## Platform Support
 
 ### Windows 11
+
 - **Shells**: PowerShell 7+, CMD
 - **Package Managers**: Chocolatey, Winget, Scoop
 - **Configs**: PowerShell profiles, Windows Terminal
 
 ### macOS
+
 - **Shells**: ZSH (default), Bash
 - **Package Managers**: Homebrew, MacPorts
 - **Configs**: Shell profiles, app preferences
 
 ### Linux
+
 - **Shells**: Bash, ZSH, Fish
 - **Package Managers**: APT, YUM/DNF, Pacman, Zypper
 - **Configs**: Shell profiles, desktop environments
@@ -190,9 +198,11 @@ export GIT_EMAIL="{{ .Variables.git_email }}"
 ## Development
 
 ### Prerequisites
+
 - Go 1.22.2 or later
 
 ### Building
+
 ```bash
 # Clone the repository
 git clone https://github.com/vleeuwenmenno/dotfiles-cp.git
@@ -218,6 +228,7 @@ go run build.go -help
 ```
 
 ### Testing
+
 ```bash
 # Run tests
 go run build.go -test
@@ -276,12 +287,14 @@ go run build.go -deps        # Download dependencies
 ```
 
 **Installation & Updates:**
+
 - **Install**: `go install github.com/vleeuwenmenno/dotfiles-cp/cmd/dotfiles@latest`
 - **Update**: `dotfiles update` (or re-run the install command)
 - **Development**: `go run build.go -install` (from source)
 - **Binary**: Download from releases page
 
 **Update Methods:**
+
 ```bash
 # Method 1: Use built-in update command (requires Go)
 dotfiles update
@@ -297,6 +310,7 @@ go install github.com/vleeuwenmenno/dotfiles-cp/cmd/dotfiles@v1.0.0
 ```
 
 **Note**: The `dotfiles update` command requires Go to be installed. If you don't have Go installed, you can:
+
 - Download the latest binary from the releases page
 - Install Go and then use the update command
 - Use a package manager like Homebrew, Chocolatey, etc. (when available)
@@ -320,6 +334,5 @@ go install github.com/vleeuwenmenno/dotfiles-cp/cmd/dotfiles@v1.0.0
 
 ## Support
 
-- 📖 [Documentation](https://github.com/vleeuwenmenno/dotfiles-cp/wiki)
+- 📖 [Documentation](https://github.com/vleeuwenmenno/dotfiles-cp/docs/index.md)
 - 🐛 [Issue Tracker](https://github.com/vleeuwenmenno/dotfiles-cp/issues)
-- 💬 [Discussions](https://github.com/vleeuwenmenno/dotfiles-cp/discussions)
