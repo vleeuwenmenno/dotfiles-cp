@@ -527,14 +527,14 @@ func (m *FilesModule) planEnsureFile(task *config.Task, ctx *modules.ExecutionCo
 		desiredContent = string(contentBytes)
 
 		if render, exists := task.Config["render"]; exists && render.(bool) {
-			desiredContent, err = m.processTemplate(desiredContent, ctx.Variables)
+			desiredContent, err = m.processTemplateWithPathConversion(desiredContent, ctx.Variables, false)
 			if err != nil {
 				return nil, fmt.Errorf("failed to render content template: %w", err)
 			}
 		}
 	} else if contentStr, exists := task.Config["content"]; exists {
 		if contentString, ok := contentStr.(string); ok {
-			desiredContent, err = m.processTemplate(contentString, ctx.Variables)
+			desiredContent, err = m.processTemplateWithPathConversion(contentString, ctx.Variables, false)
 			if err != nil {
 				return nil, fmt.Errorf("failed to process content template: %w", err)
 			}
