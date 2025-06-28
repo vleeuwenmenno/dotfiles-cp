@@ -260,23 +260,23 @@ func (m *SymlinksModule) ListActions() []*modules.ActionDocumentation {
 				{
 					Description: "Create a basic symlink",
 					Config: map[string]interface{}{
-						"src": "config/nvim/init.vim",
-						"dst": "{{ .home }}/.config/nvim/init.vim",
+						"src": "files/config/nvim/init.vim",
+						"dst": "{{ .paths.home }}/.config/nvim/init.vim",
 					},
 				},
 				{
 					Description: "Create a symlink with backup",
 					Config: map[string]interface{}{
-						"src":    "config/git/gitconfig",
-						"dst":    "{{ .home }}/.gitconfig",
+						"src":    "files/config/git/gitconfig",
+						"dst":    "{{ .paths.home }}/.gitconfig",
 						"backup": true,
 					},
 				},
 				{
 					Description: "Symlink an entire directory",
 					Config: map[string]interface{}{
-						"src": "config/zsh",
-						"dst": "{{ .home }}/.config/zsh",
+						"src": "files/config/zsh",
+						"dst": "{{ .paths.home }}/.config/zsh",
 					},
 				},
 			},
