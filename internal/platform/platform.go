@@ -1,6 +1,8 @@
 package platform
 
 import (
+	"bufio"
+	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
@@ -9,13 +11,21 @@ import (
 
 // PlatformInfo contains information about the current platform
 type PlatformInfo struct {
-	OS              string   `json:"os"`
-	Arch            string   `json:"arch"`
-	Shell           string   `json:"shell"`
-	PackageManagers []string `json:"package_managers"`
-	HomeDir         string   `json:"home_dir"`
-	ConfigDir       string   `json:"config_dir"`
-	IsElevated      bool     `json:"is_elevated"`
+	OS                      string            `json:"os"`
+	Arch                    string            `json:"arch"`
+	Shell                   string            `json:"shell"`
+	PackageManagers         []string          `json:"package_managers"`
+	AvailablePackageManagers []string         `json:"available_package_managers"`
+	HomeDir                 string            `json:"home_dir"`
+	ConfigDir               string            `json:"config_dir"`
+	IsElevated              bool              `json:"is_elevated"`
+	IsRoot                  bool              `json:"is_root"`
+	Distro                  string            `json:"distro"`
+	DistroVersion           string            `json:"distro_version"`
+	DistroCodename          string            `json:"distro_codename"`
+	KernelVersion           string            `json:"kernel_version"`
+	SystemVersion           string            `json:"system_version"`
+	UnameInfo               map[string]string `json:"uname_info"`
 }
 
 // GetPlatformInfo returns detailed information about the current platform
@@ -41,9 +51,31 @@ func GetPlatformInfo() (*PlatformInfo, error) {
 
 	// Detect package managers
 	info.PackageManagers = detectPackageManagers(info.OS)
+	info.AvailablePackageManagers = info.PackageManagers // Alias for template compatibility
 
 	// Check if running with elevated privileges
 	info.IsElevated = isElevated(info.OS)
+	info.IsRoot = (info.OS != "windows" && os.Geteuid() == 0)
+
+	// Get system information
+	info.KernelVersion = getKernelVersion()
+	info.UnameInfo = getUnameInfo()
+
+	// Get distro/system version information
+	switch info.OS {
+	case "linux":
+		info.Distro, info.DistroVersion, info.DistroCodename = detectLinuxDistro()
+		info.SystemVersion = fmt.Sprintf("%s %s", info.Distro, info.DistroVersion)
+	case "windows":
+		info.SystemVersion = getWindowsVersion()
+		info.Distro = "Windows"
+	case "darwin":
+		info.SystemVersion = getMacOSVersion()
+		info.Distro = "macOS"
+	default:
+		info.Distro = info.OS
+		info.SystemVersion = info.OS
+	}
 
 	return info, nil
 }
@@ -209,6 +241,171 @@ func GetShellConfigPath(shell, homeDir string) string {
 	default:
 		return ""
 	}
+}
+
+// detectLinuxDistro detects the Linux distribution and version
+func detectLinuxDistro() (distro, version, codename string) {
+	// Try /etc/os-release first (standard)
+	if distro, version, codename = parseOSRelease("/etc/os-release"); distro != "" {
+		return
+	}
+
+	// Try /usr/lib/os-release as fallback
+	if distro, version, codename = parseOSRelease("/usr/lib/os-release"); distro != "" {
+		return
+	}
+
+	// Try legacy files
+	if distro = readFirstLine("/etc/debian_version"); distro != "" {
+		return "Debian", distro, ""
+	}
+	if distro = readFirstLine("/etc/redhat-release"); distro != "" {
+		return parseRedhatRelease(distro)
+	}
+	if distro = readFirstLine("/etc/arch-release"); distro != "" {
+		return "Arch Linux", "rolling", ""
+	}
+
+	return "Unknown", "", ""
+}
+
+// parseOSRelease parses /etc/os-release or /usr/lib/os-release
+func parseOSRelease(filepath string) (distro, version, codename string) {
+	file, err := os.Open(filepath)
+	if err != nil {
+		return "", "", ""
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, "NAME=") {
+			distro = strings.Trim(strings.TrimPrefix(line, "NAME="), "\"")
+		} else if strings.HasPrefix(line, "VERSION=") {
+			version = strings.Trim(strings.TrimPrefix(line, "VERSION="), "\"")
+		} else if strings.HasPrefix(line, "VERSION_CODENAME=") {
+			codename = strings.Trim(strings.TrimPrefix(line, "VERSION_CODENAME="), "\"")
+		} else if strings.HasPrefix(line, "VERSION_ID=") && version == "" {
+			version = strings.Trim(strings.TrimPrefix(line, "VERSION_ID="), "\"")
+		}
+	}
+	return
+}
+
+// parseRedhatRelease parses Red Hat style release files
+func parseRedhatRelease(content string) (distro, version, codename string) {
+	parts := strings.Fields(content)
+	if len(parts) >= 3 {
+		distro = parts[0]
+		for i, part := range parts {
+			if strings.Contains(part, ".") && len(part) > 1 {
+				version = part
+				break
+			}
+			if part == "release" && i+1 < len(parts) {
+				version = parts[i+1]
+				break
+			}
+		}
+	}
+	return distro, version, ""
+}
+
+// readFirstLine reads the first line of a file
+func readFirstLine(filepath string) string {
+	content, err := os.ReadFile(filepath)
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(string(content), "\n")
+	if len(lines) > 0 {
+		return strings.TrimSpace(lines[0])
+	}
+	return ""
+}
+
+// getWindowsVersion gets Windows version information
+func getWindowsVersion() string {
+	cmd := exec.Command("cmd", "/c", "ver")
+	output, err := cmd.Output()
+	if err != nil {
+		return "Windows (unknown version)"
+	}
+
+	version := strings.TrimSpace(string(output))
+	// Clean up the output (remove "Microsoft Windows [Version " and "]")
+	if strings.Contains(version, "[Version ") {
+		start := strings.Index(version, "[Version ") + 9
+		end := strings.Index(version[start:], "]")
+		if end > 0 {
+			version = version[start : start+end]
+		}
+	}
+
+	return version
+}
+
+// getMacOSVersion gets macOS version information
+func getMacOSVersion() string {
+	cmd := exec.Command("sw_vers", "-productVersion")
+	output, err := cmd.Output()
+	if err != nil {
+		return "macOS (unknown version)"
+	}
+	return strings.TrimSpace(string(output))
+}
+
+// getKernelVersion gets the kernel version
+func getKernelVersion() string {
+	if runtime.GOOS == "windows" {
+		return getWindowsVersion()
+	}
+
+	cmd := exec.Command("uname", "-r")
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
+}
+
+// getUnameInfo gets detailed uname information
+func getUnameInfo() map[string]string {
+	info := make(map[string]string)
+
+	if runtime.GOOS == "windows" {
+		// Windows equivalent information
+		info["system"] = "Windows"
+		info["version"] = getWindowsVersion()
+		info["machine"] = runtime.GOARCH
+		return info
+	}
+
+	// Unix-like systems
+	fields := []struct {
+		flag string
+		key  string
+	}{
+		{"-s", "system"},     // System name
+		{"-n", "nodename"},   // Network node hostname
+		{"-r", "release"},    // System release
+		{"-v", "version"},    // System version
+		{"-m", "machine"},    // Machine hardware name
+		{"-p", "processor"},  // Processor type
+		{"-i", "platform"},   // Hardware platform
+		{"-o", "operating"},  // Operating system
+	}
+
+	for _, field := range fields {
+		cmd := exec.Command("uname", field.flag)
+		output, err := cmd.Output()
+		if err == nil {
+			info[field.key] = strings.TrimSpace(string(output))
+		}
+	}
+
+	return info
 }
 
 // GetPackageManagerInstallCommand returns the install command for a package manager

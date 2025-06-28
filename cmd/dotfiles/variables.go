@@ -435,9 +435,41 @@ func displayValue(key string, value interface{}, format string) error {
 		fmt.Printf("%v\n", value)
 		return nil
 	default: // yaml
-		fmt.Printf("%s: %v\n", key, value)
-		return nil
+		fmt.Printf("%s:\n", key)
+		return displayValueYAML(value, 1)
 	}
+}
+
+func displayValueYAML(value interface{}, indent int) error {
+	indentStr := strings.Repeat("  ", indent)
+
+	switch v := value.(type) {
+	case map[string]interface{}:
+		for k, val := range v {
+			switch subVal := val.(type) {
+			case map[string]interface{}:
+				fmt.Printf("%s%s:\n", indentStr, k)
+				if err := displayValueYAML(subVal, indent+1); err != nil {
+					return err
+				}
+			case []interface{}:
+				fmt.Printf("%s%s:\n", indentStr, k)
+				for _, item := range subVal {
+					fmt.Printf("%s  - %v\n", indentStr, item)
+				}
+			default:
+				fmt.Printf("%s%s: %v\n", indentStr, k, val)
+			}
+		}
+	case []interface{}:
+		for _, item := range v {
+			fmt.Printf("%s- %v\n", indentStr, item)
+		}
+	default:
+		fmt.Printf("%s%v\n", indentStr, v)
+	}
+
+	return nil
 }
 
 func displayTrace(key string, traces []*config.VariableSource, showRaw bool, processedValue interface{}) {

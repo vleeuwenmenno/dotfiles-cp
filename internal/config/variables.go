@@ -427,8 +427,20 @@ func (vl *VariableLoader) createTemplateContext(opts *VariableLoadOptions) map[s
 
 	// Platform information
 	platformInfo := map[string]interface{}{
-		"OS":   vl.platform.OS,
-		"Arch": vl.platform.Arch,
+		"OS":                      vl.platform.OS,
+		"Arch":                    vl.platform.Arch,
+		"PackageManagers":         vl.platform.PackageManagers,
+		"AvailablePackageManagers": vl.platform.AvailablePackageManagers,
+		"HomeDir":                 vl.platform.HomeDir,
+		"ConfigDir":               vl.platform.ConfigDir,
+		"IsElevated":              vl.platform.IsElevated,
+		"IsRoot":                  vl.platform.IsRoot,
+		"Distro":                  vl.platform.Distro,
+		"DistroVersion":           vl.platform.DistroVersion,
+		"DistroCodename":          vl.platform.DistroCodename,
+		"KernelVersion":           vl.platform.KernelVersion,
+		"SystemVersion":           vl.platform.SystemVersion,
+		"UnameInfo":               vl.platform.UnameInfo,
 	}
 
 	// Override with options if provided
