@@ -198,9 +198,9 @@ func (m *SymlinksModule) PlanTask(task *config.Task, ctx *modules.ExecutionConte
 // processTemplate processes a template string with variables
 func (m *SymlinksModule) processTemplate(templateStr string, variables map[string]interface{}) (string, error) {
 	tmpl := template.New("symlink").Option("missingkey=zero").Funcs(template.FuncMap{
-		"pathJoin":  filepath.Join,
+		"pathJoin":  func(paths ...string) string { return filepath.Join(paths...) },
 		"pathSep":   func() string { return string(filepath.Separator) },
-		"pathClean": filepath.Clean,
+		"pathClean": func(path string) string { return filepath.Clean(path) },
 	})
 
 	tmpl, err := tmpl.Parse(templateStr)
@@ -213,7 +213,9 @@ func (m *SymlinksModule) processTemplate(templateStr string, variables map[strin
 		return "", fmt.Errorf("failed to execute template: %w", err)
 	}
 
-	return result.String(), nil
+	// Ensure OS-specific path separators
+	renderedResult := result.String()
+	return filepath.FromSlash(renderedResult), nil
 }
 
 // ExplainAction returns documentation for a specific action

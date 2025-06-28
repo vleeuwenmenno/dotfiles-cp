@@ -99,7 +99,7 @@ Shows the final merged state after all imports and precedence rules are applied.
 			// Load variables
 			variables, err := vloader.LoadAllVariables(opts)
 			if err != nil {
-				log.Error().Err(err).Msg("Failed to load variables")
+				handleVariableError(err)
 				os.Exit(1)
 			}
 
@@ -190,7 +190,7 @@ Examples:
 			// Load variables
 			variables, err := vloader.LoadAllVariables(opts)
 			if err != nil {
-				log.Error().Err(err).Msg("Failed to load variables")
+				handleVariableError(err)
 				os.Exit(1)
 			}
 
@@ -278,7 +278,7 @@ This is useful for:
 			// Load variables first to get processed values
 			variables, err := vloader.LoadAllVariables(nil)
 			if err != nil {
-				log.Error().Err(err).Msg("Failed to load variables")
+				handleVariableError(err)
 				os.Exit(1)
 			}
 
@@ -341,7 +341,7 @@ This helps understand the variable loading process and file hierarchy.`,
 			// Load variables
 			_, err = vloader.LoadAllVariables(nil)
 			if err != nil {
-				log.Error().Err(err).Msg("Failed to load variables")
+				handleVariableError(err)
 				os.Exit(1)
 			}
 
@@ -353,6 +353,8 @@ This helps understand the variable loading process and file hierarchy.`,
 
 	return sourcesCmd
 }
+
+
 
 // Helper functions for display
 

@@ -115,15 +115,7 @@ package management integration, and works seamlessly across Windows, macOS, and 
 	}
 
 	// Add validate command
-	validateCmd := &cobra.Command{
-		Use:   "validate",
-		Short: "Validate dotfiles configuration file",
-		Run: func(cmd *cobra.Command, args []string) {
-			log := logger.Get()
-			log.Info().Msg("Validating configuration...")
-			log.Warn().Msg("Command not yet implemented")
-		},
-	}
+	validateCmd := createValidateCommand()
 
 	// Add update command
 	updateCmd := &cobra.Command{
@@ -167,8 +159,7 @@ Use --check to only check for updates without installing.`,
 	// Add variables command
 	variablesCmd := createVariablesCommand()
 
-	// Add plan command
-	planCmd := createPlanCommand()
+
 
 	// Add explain command
 	explainCmd := createExplainCommand()
@@ -184,7 +175,7 @@ Use --check to only check for updates without installing.`,
 	rootCmd.AddCommand(validateCmd)
 	rootCmd.AddCommand(updateCmd)
 	rootCmd.AddCommand(variablesCmd)
-	rootCmd.AddCommand(planCmd)
+
 	rootCmd.AddCommand(explainCmd)
 
 	// Execute the root command

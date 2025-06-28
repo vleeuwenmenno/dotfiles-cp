@@ -191,3 +191,103 @@ func WriteFile(path string, data []byte, perm os.FileMode) error {
 func ReadFile(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
+
+// GetContentDiffSummary returns a simple summary of differences between two text contents
+func GetContentDiffSummary(oldContent, newContent string) []string {
+	var changes []string
+
+	oldLines := strings.Split(oldContent, "\n")
+	newLines := strings.Split(newContent, "\n")
+
+	if len(oldLines) != len(newLines) {
+		changes = append(changes, fmt.Sprintf("Line count: %d -> %d lines", len(oldLines), len(newLines)))
+	}
+
+	// Count changed lines (simple comparison)
+	changedLines := 0
+	maxLines := len(oldLines)
+	if len(newLines) > maxLines {
+		maxLines = len(newLines)
+	}
+
+	for i := 0; i < maxLines; i++ {
+		oldLine := ""
+		newLine := ""
+
+		if i < len(oldLines) {
+			oldLine = oldLines[i]
+		}
+		if i < len(newLines) {
+			newLine = newLines[i]
+		}
+
+		if oldLine != newLine {
+			changedLines++
+		}
+	}
+
+	if changedLines > 0 {
+		changes = append(changes, fmt.Sprintf("Changed lines: %d", changedLines))
+	}
+
+	// Show size difference
+	if len(oldContent) != len(newContent) {
+		changes = append(changes, fmt.Sprintf("Size: %d -> %d bytes", len(oldContent), len(newContent)))
+	}
+
+	return changes
+}
+
+// GetDetailedDiff returns a detailed diff showing actual content changes
+func GetDetailedDiff(oldContent, newContent string, maxLines int) []string {
+	if maxLines <= 0 {
+		maxLines = 20 // Default limit
+	}
+
+	var diff []string
+	oldLines := strings.Split(oldContent, "\n")
+	newLines := strings.Split(newContent, "\n")
+
+	// Simple line-by-line diff implementation
+	maxLength := len(oldLines)
+	if len(newLines) > maxLength {
+		maxLength = len(newLines)
+	}
+
+	diffCount := 0
+	for i := 0; i < maxLength && diffCount < maxLines; i++ {
+		oldLine := ""
+		newLine := ""
+
+		if i < len(oldLines) {
+			oldLine = oldLines[i]
+		}
+		if i < len(newLines) {
+			newLine = newLines[i]
+		}
+
+		if oldLine != newLine {
+			diffCount++
+			lineNum := i + 1
+
+			if oldLine != "" {
+				diff = append(diff, fmt.Sprintf("- %d: %s", lineNum, oldLine))
+			}
+			if newLine != "" {
+				diff = append(diff, fmt.Sprintf("+ %d: %s", lineNum, newLine))
+			}
+			if oldLine == "" {
+				diff = append(diff, fmt.Sprintf("+ %d: (new line)", lineNum))
+			}
+			if newLine == "" {
+				diff = append(diff, fmt.Sprintf("- %d: (deleted line)", lineNum))
+			}
+		}
+	}
+
+	if diffCount >= maxLines && maxLength > maxLines {
+		diff = append(diff, fmt.Sprintf("... (showing first %d changes, %d more changes not shown)", maxLines, maxLength-maxLines))
+	}
+
+	return diff
+}

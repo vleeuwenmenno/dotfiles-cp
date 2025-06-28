@@ -246,15 +246,6 @@ func (m *FilesModule) executeEnsureFile(task *config.Task, ctx *modules.Executio
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 
-	// Check if file already exists
-	if utils.FileExists(path) {
-		if ctx.Verbose {
-			fmt.Printf("File already exists: %s\n", path)
-		}
-		// Just ensure permissions are correct
-		return os.Chmod(path, mode)
-	}
-
 	// Get content from either inline content or content_source
 	content := ""
 
@@ -300,17 +291,45 @@ func (m *FilesModule) executeEnsureFile(task *config.Task, ctx *modules.Executio
 	}
 	// If neither content nor content_source is specified, content remains empty
 
-	if ctx.Verbose {
-		if contentSourceStr, exists := task.Config["content_source"]; exists {
-			fmt.Printf("Creating file from source: %s -> %s (mode: %04o)\n", contentSourceStr, path, mode)
-		} else {
-			fmt.Printf("Creating file: %s (mode: %04o)\n", path, mode)
+	// Check if file already exists and compare content
+	fileExists := utils.FileExists(path)
+	needsUpdate := true
+
+	if fileExists {
+		// Read existing content
+		existingContent, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("failed to read existing file: %w", err)
+		}
+
+		// Compare content
+		if string(existingContent) == content {
+			needsUpdate = false
+			if ctx.Verbose {
+				fmt.Printf("File content unchanged: %s\n", path)
+			}
+			// Just ensure permissions are correct
+			return os.Chmod(path, mode)
 		}
 	}
 
-	// Create file with content
-	if err := os.WriteFile(path, []byte(content), mode); err != nil {
-		return fmt.Errorf("failed to create file: %w", err)
+	if needsUpdate {
+		if ctx.Verbose {
+			if fileExists {
+				fmt.Printf("Updating file: %s (mode: %04o)\n", path, mode)
+			} else {
+				if contentSourceStr, exists := task.Config["content_source"]; exists {
+					fmt.Printf("Creating file from source: %s -> %s (mode: %04o)\n", contentSourceStr, path, mode)
+				} else {
+					fmt.Printf("Creating file: %s (mode: %04o)\n", path, mode)
+				}
+			}
+		}
+
+		// Create or update file with content
+		if err := os.WriteFile(path, []byte(content), mode); err != nil {
+			return fmt.Errorf("failed to write file: %w", err)
+		}
 	}
 
 	return nil
@@ -480,10 +499,77 @@ func (m *FilesModule) planEnsureFile(task *config.Task, ctx *modules.ExecutionCo
 		}
 	}
 
-	// Check if file already exists
+	// Get content to compare (same logic as execution)
+	desiredContent := ""
+
+	if contentSourceStr, exists := task.Config["content_source"]; exists {
+		contentSourcePath, err := m.processTemplate(contentSourceStr.(string), ctx.Variables)
+		if err != nil {
+			return nil, fmt.Errorf("failed to process content_source template: %w", err)
+		}
+
+		if !filepath.IsAbs(contentSourcePath) {
+			contentSourcePath = filepath.Join(ctx.BasePath, contentSourcePath)
+		}
+
+		if !utils.FileExists(contentSourcePath) {
+			plan.WillSkip = true
+			plan.SkipReason = fmt.Sprintf("Content source file does not exist: %s", contentSourcePath)
+			return plan, nil
+		}
+
+		contentBytes, err := os.ReadFile(contentSourcePath)
+		if err != nil {
+			plan.WillSkip = true
+			plan.SkipReason = fmt.Sprintf("Failed to read content source: %v", err)
+			return plan, nil
+		}
+		desiredContent = string(contentBytes)
+
+		if render, exists := task.Config["render"]; exists && render.(bool) {
+			desiredContent, err = m.processTemplate(desiredContent, ctx.Variables)
+			if err != nil {
+				return nil, fmt.Errorf("failed to render content template: %w", err)
+			}
+		}
+	} else if contentStr, exists := task.Config["content"]; exists {
+		if contentString, ok := contentStr.(string); ok {
+			desiredContent, err = m.processTemplate(contentString, ctx.Variables)
+			if err != nil {
+				return nil, fmt.Errorf("failed to process content template: %w", err)
+			}
+		}
+	}
+
+	// Check if file already exists and compare content
 	if utils.FileExists(path) {
-		plan.WillSkip = true
-		plan.SkipReason = "File already exists"
+		existingContent, err := os.ReadFile(path)
+		if err != nil {
+			plan.Changes = append(plan.Changes, fmt.Sprintf("Failed to read existing file, will recreate: %v", err))
+		} else if string(existingContent) == desiredContent {
+			plan.WillSkip = true
+			plan.SkipReason = "File exists with correct content"
+			return plan, nil
+		} else {
+			plan.Changes = append(plan.Changes, "Update file content")
+
+			if ctx.ShowDiff {
+				// Show detailed diff
+				diff := utils.GetDetailedDiff(string(existingContent), desiredContent, 20)
+				if len(diff) > 0 {
+					plan.Changes = append(plan.Changes, "  Content diff:")
+					for _, line := range diff {
+						plan.Changes = append(plan.Changes, fmt.Sprintf("    %s", line))
+					}
+				}
+			} else {
+				// Show diff summary
+				diffSummary := utils.GetContentDiffSummary(string(existingContent), desiredContent)
+				for _, change := range diffSummary {
+					plan.Changes = append(plan.Changes, fmt.Sprintf("  %s", change))
+				}
+			}
+		}
 	} else {
 		plan.Changes = append(plan.Changes, "Create file")
 		// Check if parent directory needs to be created
@@ -716,9 +802,9 @@ func (m *FilesModule) ListActions() []*modules.ActionDocumentation {
 // processTemplate processes a template string with variables
 func (m *FilesModule) processTemplate(templateStr string, variables map[string]interface{}) (string, error) {
 	tmpl := template.New("files").Option("missingkey=zero").Funcs(template.FuncMap{
-		"pathJoin":  filepath.Join,
+		"pathJoin":  func(paths ...string) string { return filepath.Join(paths...) },
 		"pathSep":   func() string { return string(filepath.Separator) },
-		"pathClean": filepath.Clean,
+		"pathClean": func(path string) string { return filepath.Clean(path) },
 	})
 
 	tmpl, err := tmpl.Parse(templateStr)
@@ -731,5 +817,7 @@ func (m *FilesModule) processTemplate(templateStr string, variables map[string]i
 		return "", fmt.Errorf("failed to execute template: %w", err)
 	}
 
-	return result.String(), nil
+	// Ensure OS-specific path separators
+	renderedResult := result.String()
+	return filepath.FromSlash(renderedResult), nil
 }

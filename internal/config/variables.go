@@ -1,18 +1,84 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"text/template"
 
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/platform"
 	"github.com/vleeuwenmenno/dotfiles-cp/pkg/utils"
-
 	"gopkg.in/yaml.v3"
 )
+
+// VariableConflictError represents a variable conflict with detailed information
+type VariableConflictError struct {
+	Variable      string
+	ExistingValue interface{}
+	NewValue      interface{}
+	ExistingSource string
+	NewSource     string
+	BasePath      string
+}
+
+// Error implements the error interface
+func (e *VariableConflictError) Error() string {
+	return fmt.Sprintf("variable conflict: '%s' has different values in %s and %s",
+		e.Variable, e.getRelativePath(e.ExistingSource), e.getRelativePath(e.NewSource))
+}
+
+// PrettyPrint returns a formatted, user-friendly error message
+func (e *VariableConflictError) PrettyPrint() string {
+	var msg strings.Builder
+
+	msg.WriteString("\n")
+	msg.WriteString("🔥 VARIABLE CONFLICT DETECTED\n")
+	msg.WriteString(strings.Repeat("=", 50) + "\n\n")
+
+	msg.WriteString(fmt.Sprintf("Variable: %s\n\n", e.Variable))
+
+	msg.WriteString("Conflicting definitions found:\n\n")
+
+	// Show first definition
+	msg.WriteString(fmt.Sprintf("📁 File: %s\n", e.getRelativePath(e.ExistingSource)))
+	msg.WriteString(fmt.Sprintf("   Value: %v\n\n", e.ExistingValue))
+
+	// Show second definition
+	msg.WriteString(fmt.Sprintf("📁 File: %s\n", e.getRelativePath(e.NewSource)))
+	msg.WriteString(fmt.Sprintf("   Value: %v\n\n", e.NewValue))
+
+	msg.WriteString("💡 To fix this conflict:\n")
+	msg.WriteString("   1. Remove the duplicate definition from one of the files, OR\n")
+	msg.WriteString("   2. Use different variable names for different purposes, OR\n")
+	msg.WriteString("   3. Move one definition to a more specific scope\n\n")
+
+	msg.WriteString("Note: Variables must have the same value when defined in multiple files\n")
+
+	return msg.String()
+}
+
+// getRelativePath converts absolute paths to relative paths for better readability
+func (e *VariableConflictError) getRelativePath(source string) string {
+	if e.BasePath != "" {
+		if relPath, err := filepath.Rel(e.BasePath, source); err == nil {
+			return relPath
+		}
+	}
+	return filepath.Base(source)
+}
+
+// IsVariableConflictError checks if an error is a variable conflict error
+func IsVariableConflictError(err error) (*VariableConflictError, bool) {
+	var conflictErr *VariableConflictError
+	if errors.As(err, &conflictErr) {
+		return conflictErr, true
+	}
+	return nil, false
+}
 
 // VariableLoader handles loading and merging variables from multiple sources
 type VariableLoader struct {
@@ -74,6 +140,14 @@ func (vl *VariableLoader) LoadAllVariables(opts *VariableLoadOptions) (map[strin
 	processedVariables, err := vl.processVariableTemplates(vl.context.Variables, templateContext)
 	if err != nil {
 		return nil, fmt.Errorf("failed to process variable templates: %w", err)
+	}
+
+	// Add platform information and other context to final variables
+	// This ensures Platform, Env, etc. are available in job templates
+	for key, value := range templateContext {
+		if _, exists := processedVariables[key]; !exists {
+			processedVariables[key] = value
+		}
 	}
 
 	return processedVariables, nil
@@ -142,8 +216,13 @@ func (vl *VariableLoader) processVariablesIndex(indexPath string, templateContex
 		return fmt.Errorf("failed to load variables index from %s: %w", indexPath, err)
 	}
 
-	// Process imports first
-	for _, importFile := range index.Imports {
+	// Normalize and process imports first
+	normalizedImports, err := NormalizeImports(index.Imports)
+	if err != nil {
+		return fmt.Errorf("failed to normalize imports: %w", err)
+	}
+
+	for _, importFile := range normalizedImports {
 		if err := vl.processImport(importFile, templateContext); err != nil {
 			return fmt.Errorf("failed to process import %s: %w", importFile.Path, err)
 		}
@@ -226,7 +305,7 @@ func (vl *VariableLoader) loadVariableFile(filePath string) error {
 	return vl.addVariables(variables, filePath, 0)
 }
 
-// addVariables adds variables to the context with source tracking
+// addVariables adds variables to the context with source tracking and deep merging
 func (vl *VariableLoader) addVariables(variables map[string]interface{}, source string, line int) error {
 	for key, value := range variables {
 		// Track variable source (store raw value, will update with processed later)
@@ -238,11 +317,108 @@ func (vl *VariableLoader) addVariables(variables map[string]interface{}, source 
 			Line:           line,
 		})
 
-		// Add to context (later values override earlier ones)
-		vl.context.Variables[key] = value
+		// Deep merge or add to context
+		if existing, exists := vl.context.Variables[key]; exists {
+			merged, err := vl.deepMergeVariables(key, existing, value, source)
+			if err != nil {
+				return fmt.Errorf("failed to merge variable '%s' from %s: %w", key, source, err)
+			}
+			vl.context.Variables[key] = merged
+		} else {
+			vl.context.Variables[key] = value
+		}
 	}
 
 	return nil
+}
+
+// deepMergeVariables performs deep merging of variable values with conflict detection
+func (vl *VariableLoader) deepMergeVariables(key string, existing, new interface{}, newSource string) (interface{}, error) {
+	// If both are maps, merge them recursively
+	existingMap, existingIsMap := existing.(map[string]interface{})
+	newMap, newIsMap := new.(map[string]interface{})
+
+	if existingIsMap && newIsMap {
+		// Deep merge maps
+		result := make(map[string]interface{})
+
+		// Copy existing values
+		for k, v := range existingMap {
+			result[k] = v
+		}
+
+		// Merge new values
+		for k, v := range newMap {
+			if existingValue, exists := result[k]; exists {
+				// Check for conflicts (same key, different non-map values)
+				if !vl.isMapValue(existingValue) && !vl.isMapValue(v) && !vl.valuesEqual(existingValue, v) {
+					// Find source of existing value
+					existingSource := vl.findVariableSource(key + "." + k)
+					return nil, &VariableConflictError{
+						Variable:       key + "." + k,
+						ExistingValue:  existingValue,
+						NewValue:       v,
+						ExistingSource: existingSource,
+						NewSource:      newSource,
+						BasePath:       vl.basePath,
+					}
+				}
+
+				// Recursively merge if both are maps
+				if vl.isMapValue(existingValue) && vl.isMapValue(v) {
+					merged, err := vl.deepMergeVariables(key+"."+k, existingValue, v, newSource)
+					if err != nil {
+						return nil, err
+					}
+					result[k] = merged
+				} else {
+					// Non-map values: use the new value (precedence rule)
+					result[k] = v
+				}
+			} else {
+				result[k] = v
+			}
+		}
+
+		return result, nil
+	}
+
+	// If not both maps, check for conflict
+	if !vl.valuesEqual(existing, new) {
+		existingSource := vl.findVariableSource(key)
+		return nil, &VariableConflictError{
+			Variable:       key,
+			ExistingValue:  existing,
+			NewValue:       new,
+			ExistingSource: existingSource,
+			NewSource:      newSource,
+			BasePath:       vl.basePath,
+		}
+	}
+
+	// Same values, return the new one (precedence)
+	return new, nil
+}
+
+// isMapValue checks if a value is a map
+func (vl *VariableLoader) isMapValue(value interface{}) bool {
+	_, isMap := value.(map[string]interface{})
+	return isMap
+}
+
+// valuesEqual checks if two values are equal
+func (vl *VariableLoader) valuesEqual(a, b interface{}) bool {
+	return reflect.DeepEqual(a, b)
+}
+
+// findVariableSource finds the source file for a variable
+func (vl *VariableLoader) findVariableSource(key string) string {
+	for _, source := range vl.sources {
+		if source.Key == key || strings.HasPrefix(key, source.Key+".") {
+			return source.Source
+		}
+	}
+	return "unknown"
 }
 
 // createTemplateContext creates context for template processing
@@ -311,9 +487,9 @@ func (vl *VariableLoader) createTemplateContext(opts *VariableLoadOptions) map[s
 func (vl *VariableLoader) processTemplate(templateStr string, context map[string]interface{}) (string, error) {
 	// Create template with custom functions
 	tmpl := template.New("import").Option("missingkey=zero").Funcs(template.FuncMap{
-		"pathJoin":  filepath.Join,
+		"pathJoin":  func(paths ...string) string { return filepath.Join(paths...) },
 		"pathSep":   func() string { return string(filepath.Separator) },
-		"pathClean": filepath.Clean,
+		"pathClean": func(path string) string { return filepath.Clean(path) },
 	})
 
 	tmpl, err := tmpl.Parse(templateStr)
@@ -326,7 +502,9 @@ func (vl *VariableLoader) processTemplate(templateStr string, context map[string
 		return "", fmt.Errorf("failed to execute template: %w", err)
 	}
 
-	return result.String(), nil
+	// Ensure OS-specific path separators
+	renderedResult := result.String()
+	return filepath.FromSlash(renderedResult), nil
 }
 
 // evaluateCondition evaluates a condition string
@@ -335,9 +513,9 @@ func (vl *VariableLoader) evaluateCondition(condition string, context map[string
 	// This could be extended to support more complex expressions
 
 	tmpl := template.New("condition").Option("missingkey=zero").Funcs(template.FuncMap{
-		"pathJoin":  filepath.Join,
+		"pathJoin":  func(paths ...string) string { return filepath.Join(paths...) },
 		"pathSep":   func() string { return string(filepath.Separator) },
-		"pathClean": filepath.Clean,
+		"pathClean": func(path string) string { return filepath.Clean(path) },
 	})
 
 	tmpl, err := tmpl.Parse("{{" + condition + "}}")

@@ -174,6 +174,7 @@ func build(target BuildTarget, suffix string) error {
 	// Build command
 	args := []string{
 		"build",
+		"-buildvcs=false",
 		"-ldflags", ldflags,
 		"-o", outputPath,
 		"./" + cmdDir,

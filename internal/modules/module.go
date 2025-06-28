@@ -55,10 +55,12 @@ type Module interface {
 
 // ExecutionContext provides context for task execution
 type ExecutionContext struct {
-	BasePath  string                 // Base directory of dotfiles repo
-	Variables map[string]interface{} // Processed variables
-	DryRun    bool                   // Whether this is a dry run
-	Verbose   bool                   // Whether to output verbose information
+	BasePath    string                 // Base directory of dotfiles repo
+	Variables   map[string]interface{} // Processed variables
+	DryRun      bool                   // Whether this is a dry run
+	Verbose     bool                   // Whether to output verbose information
+	ShowDiff    bool                   // Whether to show detailed diffs of file changes
+	HideSkipped bool                   // Whether to hide skipped jobs from output
 }
 
 // TaskPlan describes what a task would do

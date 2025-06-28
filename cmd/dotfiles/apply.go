@@ -5,11 +5,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"text/template"
 
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/config"
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/jobs"
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/logger"
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/modules"
+	"github.com/vleeuwenmenno/dotfiles-cp/internal/modules/files"
+	"github.com/vleeuwenmenno/dotfiles-cp/internal/modules/symlinks"
 
 	"github.com/spf13/cobra"
 )
@@ -21,6 +24,8 @@ func createApplyCommand() *cobra.Command {
 		shell       string
 		environment []string
 		dryRun      bool
+		showDiff    bool
+		hideSkipped bool
 	)
 
 	applyCmd := &cobra.Command{
@@ -34,7 +39,9 @@ This command will:
 - Process templates
 - Run any configured scripts
 
-Use --dry-run to see what would be done without actually making changes.`,
+Use --dry-run to see what would be done without making changes (replaces the plan command).
+Use --hide-skipped to only show jobs that will make changes.
+Use --show-diff with --dry-run to see detailed file content differences.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			log := logger.Get()
 
@@ -81,13 +88,13 @@ Use --dry-run to see what would be done without actually making changes.`,
 
 			variables, err := vloader.LoadAllVariables(opts)
 			if err != nil {
-				log.Error().Err(err).Msg("Failed to load variables")
+				handleVariableError(err)
 				os.Exit(1)
 			}
 
-			// Load jobs
+			// Load jobs with condition filtering
 			jobsIndexPath := cfg.GetJobsIndexPath(basePath)
-			tasksList, err := jobs.LoadJobsFromFile(jobsIndexPath)
+			tasksList, err := jobs.LoadJobsFromFileWithConditions(jobsIndexPath, variables)
 			if err != nil {
 				log.Error().Err(err).Msg("Failed to load jobs")
 				os.Exit(1)
@@ -99,14 +106,24 @@ Use --dry-run to see what would be done without actually making changes.`,
 			}
 
 			// Create module registry
-			registry := createModuleRegistry()
+			registry := modules.NewModuleRegistry()
+			if err := registry.Register(files.New()); err != nil {
+				log.Error().Err(err).Msg("Failed to register files module")
+				os.Exit(1)
+			}
+			if err := registry.Register(symlinks.New()); err != nil {
+				log.Error().Err(err).Msg("Failed to register symlinks module")
+				os.Exit(1)
+			}
 
 			// Create execution context
 			ctx := &modules.ExecutionContext{
-				BasePath:  basePath,
-				Variables: variables,
-				DryRun:    dryRun,
-				Verbose:   verbose,
+				BasePath:    basePath,
+				Variables:   variables,
+				DryRun:      dryRun,
+				Verbose:     verbose,
+				ShowDiff:    showDiff,
+				HideSkipped: hideSkipped,
 			}
 
 			// Show what we're about to do
@@ -122,7 +139,12 @@ Use --dry-run to see what would be done without actually making changes.`,
 			failCount := 0
 
 			for i, task := range tasksList {
-				fmt.Printf("[%d/%d] %s (%s)\n", i+1, len(tasksList), task.ID, task.Action)
+				displayName := renderTaskDisplayName(task, variables)
+				sourceInfo := ""
+				if task.Source != "" {
+					sourceInfo = fmt.Sprintf(" [from: %s]", task.Source)
+				}
+				fmt.Printf("[%d/%d] %s (%s)%s\n", i+1, len(tasksList), displayName, task.Action, sourceInfo)
 
 				// Plan the task first
 				plan, err := registry.PlanTask(task, ctx)
@@ -134,9 +156,11 @@ Use --dry-run to see what would be done without actually making changes.`,
 
 				// Show what will be done
 				if plan.WillSkip {
-					fmt.Printf("   ⏭️  SKIP: %s\n", plan.SkipReason)
+					if !hideSkipped {
+						fmt.Printf("   ⏭️  SKIP: %s\n", plan.SkipReason)
+						fmt.Println()
+					}
 					skipCount++
-					fmt.Println()
 					continue
 				}
 
@@ -208,6 +232,45 @@ Use --dry-run to see what would be done without actually making changes.`,
 	applyCmd.Flags().StringVar(&shell, "shell", "", "Override shell detection (bash, zsh, powershell)")
 	applyCmd.Flags().StringSliceVarP(&environment, "env", "e", []string{}, "Set environment variables (KEY=VALUE)")
 	applyCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be done without making changes")
+	applyCmd.Flags().BoolVar(&showDiff, "show-diff", false, "Show detailed diffs of file changes (use with --dry-run)")
+	applyCmd.Flags().BoolVar(&hideSkipped, "hide-skipped", false, "Hide skipped jobs from output")
 
 	return applyCmd
+}
+
+// renderTaskDisplayName processes templates in task ID to show actual paths
+func renderTaskDisplayName(task *config.Task, variables map[string]interface{}) string {
+	tmpl := template.New("taskID").Option("missingkey=zero").Funcs(template.FuncMap{
+		"pathJoin":  filepath.Join,
+		"pathSep":   func() string { return string(filepath.Separator) },
+		"pathClean": filepath.Clean,
+	})
+
+	parsedTmpl, err := tmpl.Parse(task.ID)
+	if err != nil {
+		// If template parsing fails, return original ID
+		return task.ID
+	}
+
+	var result strings.Builder
+	if err := parsedTmpl.Execute(&result, variables); err != nil {
+		// If template execution fails, return original ID
+		return task.ID
+	}
+
+	// Convert all path separators to OS-specific ones
+	renderedID := result.String()
+	return filepath.FromSlash(renderedID)
+}
+
+// handleVariableError handles variable loading errors with special formatting for conflicts
+func handleVariableError(err error) {
+	log := logger.Get()
+
+	// Check if it's a variable conflict error for special handling
+	if conflictErr, isConflict := config.IsVariableConflictError(err); isConflict {
+		fmt.Print(conflictErr.PrettyPrint())
+	} else {
+		log.Error().Err(err).Msg("Failed to load variables")
+	}
 }

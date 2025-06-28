@@ -71,23 +71,73 @@ type ImportFile struct {
 	Variables map[string]interface{} `yaml:"variables" json:"variables"`
 }
 
+// ImportSpec represents flexible import specification (string or object)
+type ImportSpec interface{}
+
+// NormalizeImports converts mixed import specifications to ImportFile structs
+func NormalizeImports(imports []ImportSpec) ([]ImportFile, error) {
+	var result []ImportFile
+
+	for i, imp := range imports {
+		switch v := imp.(type) {
+		case string:
+			// Simple string syntax: "filename.yaml"
+			result = append(result, ImportFile{Path: v})
+		case map[string]interface{}:
+			// Object syntax with path, condition, etc.
+			importFile := ImportFile{}
+
+			if path, exists := v["path"]; exists {
+				if pathStr, ok := path.(string); ok {
+					importFile.Path = pathStr
+				} else {
+					return nil, fmt.Errorf("import[%d].path must be a string", i)
+				}
+			} else {
+				return nil, fmt.Errorf("import[%d] must have a 'path' field", i)
+			}
+
+			if condition, exists := v["condition"]; exists {
+				if condStr, ok := condition.(string); ok {
+					importFile.Condition = condStr
+				}
+			}
+
+			if variables, exists := v["variables"]; exists {
+				if varMap, ok := variables.(map[string]interface{}); ok {
+					importFile.Variables = varMap
+				}
+			}
+
+			result = append(result, importFile)
+		default:
+			return nil, fmt.Errorf("import[%d] must be either a string or an object", i)
+		}
+	}
+
+	return result, nil
+}
+
 // VariableIndex represents the structure of variables/index.yaml
 type VariableIndex struct {
-	Imports   []ImportFile           `yaml:"imports" json:"imports"`
+	Imports   []ImportSpec           `yaml:"imports" json:"imports"`
 	Variables map[string]interface{} `yaml:"variables" json:"variables"`
 }
 
 // JobsIndex represents the structure of jobs/index.yaml
 type JobsIndex struct {
-	Jobs map[string]interface{} `yaml:",inline" json:"jobs"`
+	Imports []ImportSpec           `yaml:"imports" json:"imports"`
+	Jobs    map[string]interface{} `yaml:",inline" json:"jobs"`
 }
 
 // Task represents a single task to be executed
 type Task struct {
-	ID     string                 `json:"id"`
-	Action string                 `json:"action"`
-	Config map[string]interface{} `json:"config"`
-	Order  int                    `json:"order"`
+	ID        string                 `json:"id"`
+	Action    string                 `json:"action"`
+	Config    map[string]interface{} `json:"config"`
+	Condition string                 `json:"condition,omitempty"`
+	Source    string                 `json:"source,omitempty"`
+	Order     int                    `json:"order"`
 }
 
 // FileMapping defines how a source file should be mapped to a target location
