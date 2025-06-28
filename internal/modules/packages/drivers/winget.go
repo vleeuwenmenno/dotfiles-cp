@@ -166,3 +166,8 @@ func (d *WingetDriver) GetPackageInfo(packageName string) (map[string]string, er
 
 	return info, nil
 }
+
+// GetAllInstalledPackages returns a map of all installed packages
+func (d *WingetDriver) GetAllInstalledPackages() (map[string]bool, error) {
+	return d.fetchAllInstalledPackages()
+}

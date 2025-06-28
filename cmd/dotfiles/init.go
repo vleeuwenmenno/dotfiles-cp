@@ -256,11 +256,6 @@ shell:
   type: "powershell"
   profile: "{{ pathJoin .Env.USERPROFILE \"Documents\" \"PowerShell\" \"profile.ps1\" }}"
 
-package_managers:
-  - "winget"
-  - "chocolatey"
-  - "scoop"
-
 editor:
   vscode_settings: "{{ pathJoin .Env.APPDATA \"Code\" \"User\" \"settings.json\" }}"
 `,
@@ -273,12 +268,6 @@ paths:
 shell:
   type: "bash"
   profile: "{{ pathJoin .Env.HOME \".bashrc\" }}"
-
-package_managers:
-  - "apt"
-  - "yum"
-  - "dnf"
-  - "pacman"
 
 editor:
   vscode_settings: "{{ pathJoin .Env.HOME \".config\" \"Code\" \"User\" \"settings.json\" }}"

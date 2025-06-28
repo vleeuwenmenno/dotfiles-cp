@@ -19,15 +19,19 @@ func NewDnfDriver() *DnfDriver {
 
 // IsPackageInstalled checks if a package is installed via DNF
 func (d *DnfDriver) IsPackageInstalled(packageName string) (bool, error) {
-	// Use 'dnf list installed' to check if package is installed
-	output, err := d.RunCommand("list", "installed", packageName)
+	return d.IsPackageInstalledCached(packageName, d.fetchAllInstalledPackages)
+}
+
+// fetchAllInstalledPackages fetches all installed packages from DNF
+func (d *DnfDriver) fetchAllInstalledPackages() (map[string]bool, error) {
+	output, err := d.RunCommand("list", "installed")
 	if err != nil {
-		// If command fails, package is likely not installed
-		return false, nil
+		return nil, fmt.Errorf("failed to list installed packages: %w", err)
 	}
 
-	// Parse the output to see if we found the package
+	packages := make(map[string]bool)
 	lines := strings.Split(output, "\n")
+
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -40,19 +44,17 @@ func (d *DnfDriver) IsPackageInstalled(packageName string) (bool, error) {
 		}
 
 		// DNF output format: "packagename.arch version repository"
-		if strings.Contains(line, packageName) {
-			parts := strings.Fields(line)
-			if len(parts) >= 3 {
-				// Extract package name (before the dot for architecture)
-				installedPkg := strings.Split(parts[0], ".")[0]
-				if strings.EqualFold(installedPkg, packageName) {
-					return true, nil
-				}
-			}
+		parts := strings.Fields(line)
+		if len(parts) >= 3 {
+			// Extract package name (before the dot for architecture)
+			fullName := parts[0]
+			pkgName := strings.Split(fullName, ".")[0]
+			packages[pkgName] = true
+			packages[strings.ToLower(pkgName)] = true
 		}
 	}
 
-	return false, nil
+	return packages, nil
 }
 
 // InstallPackage installs a package using DNF
@@ -180,4 +182,9 @@ func (d *DnfDriver) IsAvailable() bool {
 	// For DNF operations, we typically need sudo for install/remove
 	// But we can still check package status without it
 	return true
+}
+
+// GetAllInstalledPackages returns a map of all installed packages
+func (d *DnfDriver) GetAllInstalledPackages() (map[string]bool, error) {
+	return d.fetchAllInstalledPackages()
 }

@@ -195,6 +195,7 @@ func (d *BrewDriver) GetPackageInfo(packageName string) (map[string]string, erro
 			info["manager"] = "homebrew"
 			return info, nil
 		}
+
 	}
 
 	// Check if it's a cask
@@ -213,4 +214,9 @@ func (d *BrewDriver) GetPackageInfo(packageName string) (map[string]string, erro
 	}
 
 	return nil, fmt.Errorf("package %s not found", packageName)
+}
+
+// GetAllInstalledPackages returns a map of all installed packages
+func (d *BrewDriver) GetAllInstalledPackages() (map[string]bool, error) {
+	return d.fetchAllInstalledPackages()
 }

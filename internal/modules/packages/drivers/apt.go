@@ -206,6 +206,11 @@ func (d *AptDriver) GetPackageInfo(packageName string) (map[string]string, error
 	return info, nil
 }
 
+// GetAllInstalledPackages returns a map of all installed packages
+func (d *AptDriver) GetAllInstalledPackages() (map[string]bool, error) {
+	return d.fetchAllInstalledPackages()
+}
+
 // IsAvailable overrides the base implementation to also check for sudo
 func (d *AptDriver) IsAvailable() bool {
 	// Check if apt is available

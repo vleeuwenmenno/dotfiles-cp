@@ -19,6 +19,7 @@ The variables system is the heart of the dotfiles manager, providing a powerful 
 ## 🎯 **Overview**
 
 Variables provide dynamic data to templates and support:
+
 - **Cross-platform configuration** - Different values for Windows/macOS/Linux
 - **Environment-specific settings** - Work vs personal vs development
 - **Template processing** - Go template syntax with custom functions
@@ -69,8 +70,8 @@ editor:
   terminal: "vim"
 
 directories:
-  projects: "{{ pathJoin .User.Home \"Projects\" }}"
-  downloads: "{{ pathJoin .User.Home \"Downloads\" }}"
+  projects: '{{ pathJoin .User.Home "Projects" }}'
+  downloads: '{{ pathJoin .User.Home "Downloads" }}'
 
 colors:
   theme: "dark"
@@ -87,29 +88,18 @@ paths:
 
 shell:
   type: "powershell"
-  profile: "{{ pathJoin .Env.USERPROFILE \"Documents\" \"PowerShell\" \"profile.ps1\" }}"
-
-package_managers:
-  - "winget"
-  - "chocolatey"
-  - "scoop"
+  profile: '{{ pathJoin .Env.USERPROFILE "Documents" "PowerShell" "profile.ps1" }}'
 ```
 
 ```yaml
 # variables/platforms/linux.yaml
 paths:
   home: "{{ .Env.HOME }}"
-  config: "{{ pathJoin .Env.HOME \".config\" }}"
+  config: '{{ pathJoin .Env.HOME ".config" }}'
 
 shell:
   type: "bash"
-  profile: "{{ pathJoin .Env.HOME \".bashrc\" }}"
-
-package_managers:
-  - "apt"
-  - "yum"
-  - "dnf"
-  - "pacman"
+  profile: '{{ pathJoin .Env.HOME ".bashrc" }}'
 ```
 
 ### **Environment-Specific Variables**
@@ -127,7 +117,7 @@ proxy:
   https: "https://proxy.company.com:8080"
 
 directories:
-  work_projects: "{{ pathJoin .User.Home \"Work\" \"Projects\" }}"
+  work_projects: '{{ pathJoin .User.Home "Work" "Projects" }}'
 ```
 
 ## 📤 **Importing Variables**
@@ -154,22 +144,22 @@ variables:
 imports:
   # Always load global variables
   - path: "global.yaml"
-  
+
   # Load platform-specific variables if OS is detected
   - path: "platforms/{{ .Platform.OS }}.yaml"
-    condition: "ne .Platform.OS \"\""
-  
+    condition: 'ne .Platform.OS ""'
+
   # Load environment variables if DOTFILES_ENV is set
   - path: "environments/{{ .Env.DOTFILES_ENV }}.yaml"
-    condition: "ne .Env.DOTFILES_ENV \"\""
-  
+    condition: 'ne .Env.DOTFILES_ENV ""'
+
   # Load hostname-specific variables
   - path: "hosts/{{ .Platform.Hostname }}.yaml"
-    condition: "ne .Platform.Hostname \"\""
-  
+    condition: 'ne .Platform.Hostname ""'
+
   # Load work variables during work hours
   - path: "environments/work.yaml"
-    condition: "and (ne .Env.DOTFILES_ENV \"\") (eq .Env.DOTFILES_ENV \"work\")"
+    condition: 'and (ne .Env.DOTFILES_ENV "") (eq .Env.DOTFILES_ENV "work")'
 ```
 
 ### **Import with File-Specific Variables**
@@ -192,10 +182,10 @@ Variables support Go template syntax with custom functions:
 user:
   name: "{{ .Env.USERNAME }}"
   email: "{{ .user.name }}@example.com"
-  
+
 paths:
   config: "{{ .User.Home }}/.config"
-  
+
 shell:
   prompt: "{{ .user.name }}@{{ .Platform.Hostname }}"
 ```
@@ -204,9 +194,9 @@ shell:
 
 ```yaml
 editor:
-  config_path: "{{ if eq .Platform.OS \"windows\" }}{{ .Env.APPDATA }}{{ else }}{{ .User.Home }}/.config{{ end }}/Code/User/settings.json"
+  config_path: '{{ if eq .Platform.OS "windows" }}{{ .Env.APPDATA }}{{ else }}{{ .User.Home }}/.config{{ end }}/Code/User/settings.json'
 
-package_manager: "{{ if eq .Platform.OS \"windows\" }}winget{{ else if eq .Platform.OS \"darwin\" }}brew{{ else }}apt{{ end }}"
+package_manager: '{{ if eq .Platform.OS "windows" }}winget{{ else if eq .Platform.OS "darwin" }}brew{{ else }}apt{{ end }}'
 ```
 
 ### **Loops and Arrays**
@@ -216,9 +206,8 @@ shell:
   aliases:
     - name: "ll"
       command: "ls -la"
-    - name: "la" 
+    - name: "la"
       command: "ls -la"
-
 # In templates:
 # {{ range .shell.aliases }}
 # alias {{ .name }}="{{ .command }}"
@@ -229,28 +218,28 @@ shell:
 
 ### **Path Functions**
 
-| Function | Description | Example |
-|----------|-------------|---------|
-| `pathJoin` | Join path components | `{{ pathJoin .User.Home "Projects" }}` |
-| `pathSep` | Get path separator | `{{ pathSep }}` |
-| `pathClean` | Clean path | `{{ pathClean .some.path }}` |
+| Function    | Description          | Example                                |
+| ----------- | -------------------- | -------------------------------------- |
+| `pathJoin`  | Join path components | `{{ pathJoin .User.Home "Projects" }}` |
+| `pathSep`   | Get path separator   | `{{ pathSep }}`                        |
+| `pathClean` | Clean path           | `{{ pathClean .some.path }}`           |
 
 ### **Condition Functions**
 
-| Function | Description | Example |
-|----------|-------------|---------|
-| `eq` | Equal | `{{ eq .Platform.OS "windows" }}` |
-| `ne` | Not equal | `{{ ne .Env.USER "" }}` |
-| `and` | Logical AND | `{{ and (eq .Platform.OS "linux") (ne .Env.DISPLAY "") }}` |
-| `or` | Logical OR | `{{ or (eq .Platform.OS "linux") (eq .Platform.OS "darwin") }}` |
+| Function | Description | Example                                                         |
+| -------- | ----------- | --------------------------------------------------------------- |
+| `eq`     | Equal       | `{{ eq .Platform.OS "windows" }}`                               |
+| `ne`     | Not equal   | `{{ ne .Env.USER "" }}`                                         |
+| `and`    | Logical AND | `{{ and (eq .Platform.OS "linux") (ne .Env.DISPLAY "") }}`      |
+| `or`     | Logical OR  | `{{ or (eq .Platform.OS "linux") (eq .Platform.OS "darwin") }}` |
 
 ### **String Functions**
 
-| Function | Description | Example |
-|----------|-------------|---------|
-| `lower` | Lowercase | `{{ lower .Platform.OS }}` |
-| `upper` | Uppercase | `{{ upper .user.name }}` |
-| `title` | Title case | `{{ title .user.name }}` |
+| Function | Description | Example                    |
+| -------- | ----------- | -------------------------- |
+| `lower`  | Lowercase   | `{{ lower .Platform.OS }}` |
+| `upper`  | Uppercase   | `{{ upper .user.name }}`   |
+| `title`  | Title case  | `{{ title .user.name }}`   |
 
 ## 💻 **CLI Commands**
 
@@ -361,7 +350,7 @@ git:
 ```yaml
 # variables/global.yaml
 editor:
-  vscode_settings: "{{ if eq .Platform.OS \"windows\" }}{{ pathJoin .Env.APPDATA \"Code\" \"User\" \"settings.json\" }}{{ else if eq .Platform.OS \"darwin\" }}{{ pathJoin .User.Home \"Library\" \"Application Support\" \"Code\" \"User\" \"settings.json\" }}{{ else }}{{ pathJoin .User.Home \".config\" \"Code\" \"User\" \"settings.json\" }}{{ end }}"
+  vscode_settings: '{{ if eq .Platform.OS "windows" }}{{ pathJoin .Env.APPDATA "Code" "User" "settings.json" }}{{ else if eq .Platform.OS "darwin" }}{{ pathJoin .User.Home "Library" "Application Support" "Code" "User" "settings.json" }}{{ else }}{{ pathJoin .User.Home ".config" "Code" "User" "settings.json" }}{{ end }}'
 ```
 
 ### **Example 3: Environment-Specific Configuration**
@@ -378,7 +367,7 @@ git:
   email: "{{ .user.name }}@company.com"
 
 directories:
-  workspace: "{{ pathJoin .User.Home \"Work\" }}"
+  workspace: '{{ pathJoin .User.Home "Work" }}'
 ```
 
 ### **Example 4: Complex Conditional Logic**
@@ -387,18 +376,18 @@ directories:
 # variables/index.yaml
 imports:
   - path: "global.yaml"
-  
+
   # Load platform-specific variables
   - path: "platforms/{{ .Platform.OS }}.yaml"
-    condition: "ne .Platform.OS \"\""
-  
+    condition: 'ne .Platform.OS ""'
+
   # Load work config during work hours or if explicitly set
   - path: "environments/work.yaml"
-    condition: "or (eq .Env.DOTFILES_ENV \"work\") (and (ne .Env.WORK_MODE \"\") (eq .Env.WORK_MODE \"on\"))"
-  
+    condition: 'or (eq .Env.DOTFILES_ENV "work") (and (ne .Env.WORK_MODE "") (eq .Env.WORK_MODE "on"))'
+
   # Load gaming config on gaming PC
   - path: "environments/gaming.yaml"
-    condition: "and (eq .Platform.OS \"windows\") (ne .Env.GAMING_PC \"\")"
+    condition: 'and (eq .Platform.OS "windows") (ne .Env.GAMING_PC "")'
 ```
 
 ## ✅ **Best Practices**
@@ -447,6 +436,7 @@ proj_dir: "value"
 ### **Common Issues**
 
 **1. Variable not found**
+
 ```bash
 # Check if variable exists
 dotfiles variables list | grep "variable_name"
@@ -456,6 +446,7 @@ dotfiles variables trace variable_name
 ```
 
 **2. Template processing errors**
+
 ```bash
 # Check for syntax errors in YAML
 dotfiles validate
@@ -465,6 +456,7 @@ dotfiles variables sources
 ```
 
 **3. Path issues on Windows**
+
 ```yaml
 # Wrong: Mixed slashes
 path: "{{ .User.Home }}/Documents"
@@ -474,6 +466,7 @@ path: "{{ pathJoin .User.Home \"Documents\" }}"
 ```
 
 **4. Conditional imports not working**
+
 ```bash
 # Test with explicit environment
 dotfiles variables list --env DOTFILES_ENV=work
@@ -503,12 +496,12 @@ dotfiles validate
 
 ### **Error Messages**
 
-| Error | Cause | Solution |
-|-------|-------|----------|
-| `circular import detected` | Import loop | Check import chain, remove circular references |
-| `variable file does not exist` | Missing file | Check file path and spelling |
-| `failed to parse template` | Template syntax error | Check Go template syntax |
-| `condition evaluation failed` | Invalid condition | Verify condition syntax and variables |
+| Error                          | Cause                 | Solution                                       |
+| ------------------------------ | --------------------- | ---------------------------------------------- |
+| `circular import detected`     | Import loop           | Check import chain, remove circular references |
+| `variable file does not exist` | Missing file          | Check file path and spelling                   |
+| `failed to parse template`     | Template syntax error | Check Go template syntax                       |
+| `condition evaluation failed`  | Invalid condition     | Verify condition syntax and variables          |
 
 ---
 

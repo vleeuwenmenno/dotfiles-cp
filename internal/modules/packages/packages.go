@@ -3,6 +3,8 @@ package packages
 import (
 	"fmt"
 	"os/exec"
+	"path/filepath"
+	"strings"
 
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/config"
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/modules"
@@ -287,8 +289,7 @@ func (m *PackagesModule) gatherPackageStatus(pkg *PackageConfig) (*PackageStatus
 	}
 
 	// Check if package is available system-wide first (if enabled)
-	var isInstalled bool
-	if pkg.CheckSystemWide && pkg.State == "present" {
+	if pkg.CheckSystemWide && pkg.State == "present" && !m.isWildcardPattern(pkg.Name) {
 		if m.isCommandAvailable(pkg.Name) {
 			return &PackageStatus{
 				Name:         pkg.Name,
@@ -302,7 +303,12 @@ func (m *PackagesModule) gatherPackageStatus(pkg *PackageConfig) (*PackageStatus
 		}
 	}
 
-	isInstalled, err = driver.IsPackageInstalled(packageName)
+	// Handle wildcard patterns
+	if m.isWildcardPattern(packageName) {
+		return m.gatherWildcardPackageStatus(pkg, driver, packageName)
+	}
+
+	isInstalled, err := driver.IsPackageInstalled(packageName)
 	if err != nil {
 		return &PackageStatus{
 			Name:         pkg.Name,
@@ -365,6 +371,10 @@ func (m *PackagesModule) ensurePackageState(pkg *PackageConfig, ctx *modules.Exe
 			if status.ActionNeeded == "install" {
 				return driver.InstallPackage(status.PackageName)
 			} else if status.ActionNeeded == "uninstall" {
+				// Handle wildcard patterns for uninstall
+				if m.isWildcardPattern(status.PackageName) {
+					return m.uninstallWildcardPackages(driver, status.PackageName, ctx)
+				}
 				return driver.UninstallPackage(status.PackageName)
 			}
 		}
@@ -744,7 +754,112 @@ func (m *PackagesModule) ListActions() []*modules.ActionDocumentation {
 }
 
 // isCommandAvailable checks if a command is available system-wide in PATH
-func (m *PackagesModule) isCommandAvailable(commandName string) bool {
-	_, err := exec.LookPath(commandName)
+func (m *PackagesModule) isCommandAvailable(command string) bool {
+	_, err := exec.LookPath(command)
 	return err == nil
+}
+
+// isWildcardPattern checks if a package name contains wildcard characters
+func (m *PackagesModule) isWildcardPattern(name string) bool {
+	return strings.ContainsAny(name, "*?")
+}
+
+// gatherWildcardPackageStatus handles package status for wildcard patterns
+func (m *PackagesModule) gatherWildcardPackageStatus(pkg *PackageConfig, driver drivers.PackageDriver, pattern string) (*PackageStatus, error) {
+	// Get all installed packages using the new interface method
+	allPackages, err := driver.GetAllInstalledPackages()
+	if err != nil {
+		return &PackageStatus{
+			Name:         pkg.Name,
+			PackageName:  pattern,
+			Manager:      driver.Name(),
+			DesiredState: pkg.State,
+			CurrentState: "unknown",
+			NeedsAction:  false,
+			ActionNeeded: "none",
+		}, fmt.Errorf("failed to fetch installed packages for wildcard matching: %w", err)
+	}
+
+	// Find matching packages
+	var matchingPackages []string
+	for packageName := range allPackages {
+		matched, err := filepath.Match(pattern, packageName)
+		if err != nil {
+			continue // Skip invalid patterns
+		}
+		if matched {
+			matchingPackages = append(matchingPackages, packageName)
+		}
+	}
+
+	status := &PackageStatus{
+		Name:         pkg.Name,
+		PackageName:  pattern,
+		Manager:      driver.Name(),
+		DesiredState: pkg.State,
+		NeedsAction:  false,
+		ActionNeeded: "none",
+	}
+
+	// Determine status based on matches and desired state
+	hasMatches := len(matchingPackages) > 0
+
+	if pkg.State == "present" {
+		if hasMatches {
+			status.CurrentState = "installed"
+			// For wildcard install: if any packages match, consider it satisfied
+		} else {
+			status.CurrentState = "not_installed"
+			status.NeedsAction = true
+			status.ActionNeeded = "install"
+		}
+	} else if pkg.State == "absent" {
+		if hasMatches {
+			status.CurrentState = "installed"
+			status.NeedsAction = true
+			status.ActionNeeded = "uninstall"
+		} else {
+			status.CurrentState = "not_installed"
+			// Already in desired state - no action needed
+		}
+	}
+
+	return status, nil
+}
+
+// uninstallWildcardPackages handles uninstalling packages that match a wildcard pattern
+func (m *PackagesModule) uninstallWildcardPackages(driver drivers.PackageDriver, pattern string, ctx *modules.ExecutionContext) error {
+	// Get all installed packages
+	allPackages, err := driver.GetAllInstalledPackages()
+	if err != nil {
+		return fmt.Errorf("failed to get installed packages for wildcard uninstall: %w", err)
+	}
+
+	// Find matching packages
+	var matchingPackages []string
+	for packageName := range allPackages {
+		matched, err := filepath.Match(pattern, packageName)
+		if err != nil {
+			continue // Skip invalid patterns
+		}
+		if matched {
+			matchingPackages = append(matchingPackages, packageName)
+		}
+	}
+
+	if len(matchingPackages) == 0 {
+		fmt.Printf("No packages found matching pattern: %s\n", pattern)
+		return nil
+	}
+
+	// Uninstall each matching package
+	for _, pkgName := range matchingPackages {
+		fmt.Printf("Uninstalling matched package: %s (using %s)\n", pkgName, driver.Name())
+		err := driver.UninstallPackage(pkgName)
+		if err != nil {
+			return fmt.Errorf("failed to uninstall package %s: %w", pkgName, err)
+		}
+	}
+
+	return nil
 }

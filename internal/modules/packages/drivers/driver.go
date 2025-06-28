@@ -30,6 +30,9 @@ type PackageDriver interface {
 
 	// GetPackageInfo gets information about an installed package (optional, for future use)
 	GetPackageInfo(packageName string) (map[string]string, error)
+
+	// GetAllInstalledPackages returns a map of all installed packages
+	GetAllInstalledPackages() (map[string]bool, error)
 }
 
 // BaseDriver provides common functionality for all package drivers

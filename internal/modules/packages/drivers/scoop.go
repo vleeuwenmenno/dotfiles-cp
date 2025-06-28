@@ -150,3 +150,8 @@ func (d *ScoopDriver) GetPackageInfo(packageName string) (map[string]string, err
 
 	return info, nil
 }
+
+// GetAllInstalledPackages returns a map of all installed packages
+func (d *ScoopDriver) GetAllInstalledPackages() (map[string]bool, error) {
+	return d.fetchAllInstalledPackages()
+}
