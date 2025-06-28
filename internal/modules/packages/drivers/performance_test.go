@@ -229,7 +229,7 @@ func TestConcurrentAccess(t *testing.T) {
 	}
 }
 
-func ExampleCachingBenefit() {
+func Example() {
 	// Create a fast driver with caching
 	driver := NewFastMockDriver("chocolatey")
 
@@ -241,14 +241,11 @@ func ExampleCachingBenefit() {
 
 	fmt.Println("Checking multiple packages with caching:")
 
-	start := time.Now()
 	for _, pkg := range packages {
 		installed, _ := driver.IsPackageInstalled(pkg)
 		fmt.Printf("Package %s: installed=%v\n", pkg, installed)
 	}
-	duration := time.Since(start)
 
-	fmt.Printf("Total time: %v\n", duration)
 	fmt.Printf("Command calls made: %d\n", driver.commandCallCount)
 	fmt.Println("Note: Only 1 command call needed to check all packages!")
 
@@ -259,7 +256,6 @@ func ExampleCachingBenefit() {
 	// Package python: installed=true
 	// Package docker: installed=true
 	// Package vscode: installed=true
-	// Total time: 50ms
 	// Command calls made: 1
 	// Note: Only 1 command call needed to check all packages!
 }
