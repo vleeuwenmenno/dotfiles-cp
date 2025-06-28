@@ -149,13 +149,6 @@ Use --show-diff with --dry-run to see detailed file content differences.`,
 			failCount := 0
 
 			for i, task := range tasksList {
-				displayName := renderTaskDisplayName(task, variables)
-				sourceInfo := ""
-				if task.Source != "" {
-					sourceInfo = fmt.Sprintf(" [from: %s]", task.Source)
-				}
-				fmt.Printf("[%d/%d] %s (%s)%s\n", i+1, len(tasksList), displayName, task.Action, sourceInfo)
-
 				// Plan the task first
 				plan, err := registry.PlanTask(task, ctx)
 				if err != nil {
@@ -164,15 +157,29 @@ Use --show-diff with --dry-run to see detailed file content differences.`,
 					continue
 				}
 
-				// Show what will be done
+				// Check if we should skip this task
 				if plan.WillSkip {
 					if !hideSkipped {
+						displayName := renderTaskDisplayName(task, variables)
+						sourceInfo := ""
+						if task.Source != "" {
+							sourceInfo = fmt.Sprintf(" [from: %s]", task.Source)
+						}
+						fmt.Printf("[%d/%d] %s (%s)%s\n", i+1, len(tasksList), displayName, task.Action, sourceInfo)
 						fmt.Printf("   ⏭️  SKIP: %s\n", plan.SkipReason)
 						fmt.Println()
 					}
 					skipCount++
 					continue
 				}
+
+				// Show job header for tasks that will execute
+				displayName := renderTaskDisplayName(task, variables)
+				sourceInfo := ""
+				if task.Source != "" {
+					sourceInfo = fmt.Sprintf(" [from: %s]", task.Source)
+				}
+				fmt.Printf("[%d/%d] %s (%s)%s\n", i+1, len(tasksList), displayName, task.Action, sourceInfo)
 
 				if dryRun {
 					fmt.Printf("   📋 Would do:\n")
