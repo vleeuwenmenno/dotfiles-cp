@@ -3,6 +3,7 @@ package drivers
 import (
 	"fmt"
 	"os/exec"
+	"runtime"
 	"strings"
 )
 
@@ -173,8 +174,13 @@ func (d *YumDriver) GetPackageInfo(packageName string) (map[string]string, error
 	return info, nil
 }
 
-// IsAvailable overrides the base implementation to check for sudo
+// IsAvailable overrides the base implementation to check platform compatibility and sudo
 func (d *YumDriver) IsAvailable() bool {
+	// YUM is only available on Linux
+	if runtime.GOOS != "linux" {
+		return false
+	}
+
 	// Check if yum is available
 	if !d.BaseDriver.IsAvailable() {
 		return false

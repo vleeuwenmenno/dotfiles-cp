@@ -3,6 +3,7 @@ package drivers
 import (
 	"fmt"
 	"os/exec"
+	"runtime"
 	"strings"
 )
 
@@ -221,8 +222,13 @@ func (d *AptDriver) RunCommandWithSudo(args ...string) (string, error) {
 	return strings.TrimSpace(string(output)), err
 }
 
-// IsAvailable overrides the base implementation to also check for sudo
+// IsAvailable overrides the base implementation to check platform compatibility and sudo
 func (d *AptDriver) IsAvailable() bool {
+	// APT is only available on Linux
+	if runtime.GOOS != "linux" {
+		return false
+	}
+
 	// Check if apt is available
 	if !d.BaseDriver.IsAvailable() {
 		return false

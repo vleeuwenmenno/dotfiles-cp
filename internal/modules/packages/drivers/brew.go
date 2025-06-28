@@ -2,6 +2,7 @@ package drivers
 
 import (
 	"fmt"
+	"runtime"
 	"strings"
 )
 
@@ -219,4 +220,14 @@ func (d *BrewDriver) GetPackageInfo(packageName string) (map[string]string, erro
 // GetAllInstalledPackages returns a map of all installed packages
 func (d *BrewDriver) GetAllInstalledPackages() (map[string]bool, error) {
 	return d.fetchAllInstalledPackages()
+}
+
+// IsAvailable overrides the base implementation to check platform compatibility
+func (d *BrewDriver) IsAvailable() bool {
+	// Homebrew is primarily for macOS and Linux, not Windows
+	if runtime.GOOS == "windows" {
+		return false
+	}
+
+	return d.BaseDriver.IsAvailable()
 }

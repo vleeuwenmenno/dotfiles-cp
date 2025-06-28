@@ -2,6 +2,7 @@ package drivers
 
 import (
 	"fmt"
+	"runtime"
 	"strings"
 )
 
@@ -170,4 +171,14 @@ func (d *WingetDriver) GetPackageInfo(packageName string) (map[string]string, er
 // GetAllInstalledPackages returns a map of all installed packages
 func (d *WingetDriver) GetAllInstalledPackages() (map[string]bool, error) {
 	return d.fetchAllInstalledPackages()
+}
+
+// IsAvailable overrides the base implementation to check platform compatibility
+func (d *WingetDriver) IsAvailable() bool {
+	// Winget is only available on Windows
+	if runtime.GOOS != "windows" {
+		return false
+	}
+
+	return d.BaseDriver.IsAvailable()
 }

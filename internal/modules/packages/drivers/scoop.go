@@ -2,6 +2,7 @@ package drivers
 
 import (
 	"fmt"
+	"runtime"
 	"strings"
 )
 
@@ -154,4 +155,14 @@ func (d *ScoopDriver) GetPackageInfo(packageName string) (map[string]string, err
 // GetAllInstalledPackages returns a map of all installed packages
 func (d *ScoopDriver) GetAllInstalledPackages() (map[string]bool, error) {
 	return d.fetchAllInstalledPackages()
+}
+
+// IsAvailable overrides the base implementation to check platform compatibility
+func (d *ScoopDriver) IsAvailable() bool {
+	// Scoop is only available on Windows
+	if runtime.GOOS != "windows" {
+		return false
+	}
+
+	return d.BaseDriver.IsAvailable()
 }

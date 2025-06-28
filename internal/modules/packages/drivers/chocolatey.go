@@ -2,6 +2,7 @@ package drivers
 
 import (
 	"fmt"
+	"runtime"
 	"strings"
 )
 
@@ -156,4 +157,14 @@ func (d *ChocolateyDriver) GetPackageInfo(packageName string) (map[string]string
 // GetAllInstalledPackages returns a map of all installed packages
 func (d *ChocolateyDriver) GetAllInstalledPackages() (map[string]bool, error) {
 	return d.fetchAllInstalledPackages()
+}
+
+// IsAvailable overrides the base implementation to check platform compatibility
+func (d *ChocolateyDriver) IsAvailable() bool {
+	// Chocolatey is only available on Windows
+	if runtime.GOOS != "windows" {
+		return false
+	}
+
+	return d.BaseDriver.IsAvailable()
 }
