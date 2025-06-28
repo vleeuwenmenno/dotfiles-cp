@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/config"
+	"github.com/vleeuwenmenno/dotfiles-cp/internal/logger"
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/modules"
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/modules/packages/drivers"
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/platform"
@@ -275,9 +276,14 @@ func (m *PackagesModule) executeManagePackages(task *config.Task, ctx *modules.E
 
 // gatherPackageStatus gathers current status information for a package
 func (m *PackagesModule) gatherPackageStatus(pkg *PackageConfig) (*PackageStatus, error) {
+	log := logger.Get()
+
 	// Check if package is available system-wide first (if enabled)
 	if pkg.CheckSystemWide && pkg.State == "present" && !m.isWildcardPattern(pkg.Name) {
 		if m.isCommandAvailable(pkg.Name) {
+			log.Debug().
+				Str("package", pkg.Name).
+				Msg("Package found system-wide, skipping package manager check")
 			return &PackageStatus{
 				Name:         pkg.Name,
 				PackageName:  pkg.Name,
@@ -310,6 +316,11 @@ func (m *PackagesModule) gatherPackageStatus(pkg *PackageConfig) (*PackageStatus
 
 	isInstalled, err := driver.IsPackageInstalled(packageName)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("package", pkg.Name).
+			Str("driver", driver.Name()).
+			Msg("Failed to check if package is installed")
 		return &PackageStatus{
 			Name:         pkg.Name,
 			PackageName:  packageName,
@@ -344,15 +355,33 @@ func (m *PackagesModule) gatherPackageStatus(pkg *PackageConfig) (*PackageStatus
 		}
 	}
 
+	log.Debug().
+		Str("package", pkg.Name).
+		Str("manager", status.Manager).
+		Str("current_state", status.CurrentState).
+		Str("desired_state", status.DesiredState).
+		Bool("needs_action", status.NeedsAction).
+		Str("action_needed", status.ActionNeeded).
+		Msg("Package status gathered")
+
 	return status, nil
 }
 
 // ensurePackageState ensures a package is in the desired state
 func (m *PackagesModule) ensurePackageState(pkg *PackageConfig, ctx *modules.ExecutionContext) error {
+	log := logger.Get()
+
 	status, err := m.gatherPackageStatus(pkg)
 	if err != nil {
 		return fmt.Errorf("failed to check package status: %w", err)
 	}
+
+	log.Debug().
+		Str("package", pkg.Name).
+		Str("manager", status.Manager).
+		Bool("needs_action", status.NeedsAction).
+		Bool("dry_run", ctx.DryRun).
+		Msg("Ensuring package state")
 
 	if status.NeedsAction {
 		if ctx.DryRun {
@@ -391,6 +420,8 @@ func (m *PackagesModule) ensurePackageState(pkg *PackageConfig, ctx *modules.Exe
 
 // selectPackageDriver selects the best package driver for a package
 func (m *PackagesModule) selectPackageDriver(pkg *PackageConfig) (drivers.PackageDriver, string, error) {
+	log := logger.Get()
+
 	// Get the preferred driver using the registry
 	driver, err := m.driverRegistry.GetPreferredDriver(pkg.Prefer)
 	if err != nil {
@@ -398,6 +429,15 @@ func (m *PackagesModule) selectPackageDriver(pkg *PackageConfig) (drivers.Packag
 	}
 
 	packageName := m.getPackageNameForManager(pkg, driver.Name())
+
+	// Log driver selection for debugging
+	log.Debug().
+		Str("package", pkg.Name).
+		Str("selected_driver", driver.Name()).
+		Str("package_name", packageName).
+		Interface("preferences", pkg.Prefer).
+		Msg("Selected package driver")
+
 	return driver, packageName, nil
 }
 

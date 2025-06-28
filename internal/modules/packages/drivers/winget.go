@@ -2,6 +2,7 @@ package drivers
 
 import (
 	"fmt"
+	"os/exec"
 	"runtime"
 	"strings"
 )
@@ -20,7 +21,15 @@ func NewWingetDriver() *WingetDriver {
 
 // IsPackageInstalled checks if a package is installed via Winget
 func (d *WingetDriver) IsPackageInstalled(packageName string) (bool, error) {
-	return d.IsPackageInstalledCached(packageName, d.fetchAllInstalledPackages)
+	// First try the cached approach
+	installed, err := d.IsPackageInstalledCached(packageName, d.fetchAllInstalledPackages)
+	if err == nil && installed {
+		return true, nil
+	}
+
+	// If not found in cache, try direct lookup using winget show
+	// This handles cases where package names/monikers don't appear in winget list
+	return d.isPackageInstalledDirect(packageName)
 }
 
 // fetchAllInstalledPackages fetches all installed packages from Winget
@@ -40,7 +49,10 @@ func (d *WingetDriver) fetchAllInstalledPackages() (map[string]bool, error) {
 			continue
 		}
 
-		// Skip until we pass the header
+		// Skip header lines and empty lines
+		if strings.Contains(line, "Name") && strings.Contains(line, "Id") && strings.Contains(line, "Version") {
+			continue
+		}
 		if strings.Contains(line, "---") {
 			headerPassed = true
 			continue
@@ -49,28 +61,114 @@ func (d *WingetDriver) fetchAllInstalledPackages() (map[string]bool, error) {
 			continue
 		}
 
+		// Skip lines that don't look like package entries
+		if strings.HasPrefix(line, "The following packages") ||
+		   strings.HasPrefix(line, "No installed packages") ||
+		   strings.Contains(line, "packages found") {
+			continue
+		}
+
 		// Winget output format: "Name Id Version Available Source"
-		// Extract both name and ID for matching
+		// Split by multiple whitespace to handle varying spacing
 		fields := strings.Fields(line)
 		if len(fields) >= 2 {
 			name := fields[0]
 			id := fields[1]
 
-			// Store both name and ID for lookups
+			// Store both name and ID for lookups, including case variations
 			packages[name] = true
 			packages[id] = true
 			packages[strings.ToLower(name)] = true
 			packages[strings.ToLower(id)] = true
+
+			// Extract base name from ID for better matching (e.g. "nepnep.neofetch-win" -> "neofetch")
+			if strings.Contains(id, ".") {
+				idParts := strings.Split(id, ".")
+				if len(idParts) > 1 {
+					baseName := idParts[len(idParts)-1] // Take the last part
+					// Remove common suffixes like "-win", "-cli", etc.
+					baseName = strings.TrimSuffix(baseName, "-win")
+					baseName = strings.TrimSuffix(baseName, "-cli")
+					baseName = strings.TrimSuffix(baseName, "-windows")
+					packages[baseName] = true
+					packages[strings.ToLower(baseName)] = true
+				}
+			}
+
+			// Also check if name contains common patterns (remove suffixes)
+			cleanName := strings.TrimSuffix(strings.ToLower(name), "-win")
+			cleanName = strings.TrimSuffix(cleanName, "-cli")
+			cleanName = strings.TrimSuffix(cleanName, "-windows")
+			if cleanName != strings.ToLower(name) {
+				packages[cleanName] = true
+			}
 		}
 	}
 
 	return packages, nil
 }
 
+// isPackageInstalledDirect checks if a package is installed by trying to get its info
+func (d *WingetDriver) isPackageInstalledDirect(packageName string) (bool, error) {
+	// Try to get package info - if it succeeds and shows as installed, package exists
+	output, err := d.RunCommand("show", packageName)
+	if err != nil {
+		// If winget show fails, package is not available/installed
+		return false, nil
+	}
+
+	// Check if the output indicates the package is installed
+	outputLower := strings.ToLower(output)
+	if strings.Contains(outputLower, "no package found") ||
+	   strings.Contains(outputLower, "no packages found") {
+		return false, nil
+	}
+
+	// If we can show the package info, try to check if it's in the installed list
+	// by running a more specific list command
+	listOutput, listErr := d.RunCommand("list", "--exact", packageName)
+	if listErr != nil {
+		return false, nil
+	}
+
+	// If the list command returns the package, it's installed
+	listLower := strings.ToLower(listOutput)
+	return !strings.Contains(listLower, "no installed packages") &&
+	       !strings.Contains(listLower, "no packages found") &&
+	       strings.Contains(listLower, strings.ToLower(packageName)), nil
+}
+
 // InstallPackage installs a package using Winget
 func (d *WingetDriver) InstallPackage(packageName string) error {
+	// First check if the package is already installed
+	isInstalled, err := d.IsPackageInstalled(packageName)
+	if err != nil {
+		// If we can't check, proceed with installation attempt
+	} else if isInstalled {
+		// Package is already installed, this is not an error
+		return nil
+	}
+
 	output, err := d.RunCommand("install", "--exact", "--silent", "--accept-package-agreements", "--accept-source-agreements", packageName)
 	if err != nil {
+		// Check if this is the "already installed" error
+		if exitError, ok := err.(*exec.ExitError); ok {
+			// Winget exit code 0x8a15002b means package is already installed
+			if exitError.ExitCode() == 0x8a15002b || exitError.ExitCode() == -1961967829 {
+				return nil // Not an error, package is already installed
+			}
+		}
+
+		// Check output for already installed messages
+		outputLower := strings.ToLower(output)
+		if strings.Contains(outputLower, "already installed") ||
+		   strings.Contains(outputLower, "existing package already installed") ||
+		   strings.Contains(outputLower, "no available upgrade found") ||
+		   strings.Contains(outputLower, "trying to upgrade the installed package") ||
+		   strings.Contains(outputLower, "no newer package versions are available") {
+			return nil // Not an error, package is already installed
+		}
+
 		return fmt.Errorf("failed to install package %s via Winget: %w\nOutput: %s", packageName, err, output)
 	}
 	return nil

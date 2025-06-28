@@ -3,6 +3,7 @@ package drivers
 import (
 	"fmt"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -218,11 +219,55 @@ func (r *DriverRegistry) GetDriver(name string) (PackageDriver, error) {
 // GetAvailableDrivers returns all available drivers on the current system
 func (r *DriverRegistry) GetAvailableDrivers() []PackageDriver {
 	var available []PackageDriver
-	for _, driver := range r.drivers {
-		if driver.IsAvailable() {
+
+	// Define platform-specific driver order
+	var driverOrder []string
+	switch runtime.GOOS {
+	case "windows":
+		driverOrder = []string{
+			"winget", "chocolatey", "scoop", // Windows-native managers first
+			"cargo",                         // Cross-platform managers
+		}
+	case "darwin":
+		driverOrder = []string{
+			"homebrew",                      // macOS-native manager first
+			"cargo",                         // Cross-platform managers
+		}
+	case "linux":
+		driverOrder = []string{
+			"apt", "dnf", "yum",            // Linux-native managers first
+			"cargo",                         // Cross-platform managers
+		}
+	default:
+		driverOrder = []string{
+			"cargo",                         // Cross-platform fallback
+		}
+	}
+
+	// Add drivers in the platform-specific order
+	for _, driverName := range driverOrder {
+		if driver, exists := r.drivers[driverName]; exists && driver.IsAvailable() {
 			available = append(available, driver)
 		}
 	}
+
+	// Add any remaining available drivers not in the order list
+	// This ensures we don't skip any available drivers
+	for _, driver := range r.drivers {
+		if driver.IsAvailable() {
+			found := false
+			for _, existing := range available {
+				if existing.Name() == driver.Name() {
+					found = true
+					break
+				}
+			}
+			if !found {
+				available = append(available, driver)
+			}
+		}
+	}
+
 	return available
 }
 
@@ -253,5 +298,6 @@ func (r *DriverRegistry) GetPreferredDriver(preferences []string) (PackageDriver
 		}
 	}
 
+	// Return the first available driver (now guaranteed to be in consistent order)
 	return available[0], nil
 }
