@@ -245,6 +245,26 @@ Use --show-diff with --dry-run to see detailed file content differences.`,
 
 // renderTaskDisplayName processes templates in task ID to show actual paths
 func renderTaskDisplayName(task *config.Task, variables map[string]interface{}) string {
+	// Create better display names for package tasks
+	if strings.HasPrefix(task.Action, "install_package") || strings.HasPrefix(task.Action, "uninstall_package") {
+		if packageName, exists := task.Config["name"]; exists {
+			if nameStr, ok := packageName.(string); ok {
+				return fmt.Sprintf("%s: %s", task.Action, nameStr)
+			}
+		}
+	}
+
+	// For manage_packages, show a summary
+	if task.Action == "manage_packages" {
+		if packages, exists := task.Config["packages"]; exists {
+			if packageList, ok := packages.([]interface{}); ok {
+				if len(packageList) > 0 {
+					return fmt.Sprintf("manage_packages: %d packages", len(packageList))
+				}
+			}
+		}
+	}
+
 	tmpl := template.New("taskID").Option("missingkey=zero").Funcs(template.FuncMap{
 		"pathJoin":  filepath.Join,
 		"pathSep":   func() string { return string(filepath.Separator) },
