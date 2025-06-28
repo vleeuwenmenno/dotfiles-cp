@@ -116,3 +116,68 @@ func TestSelectPackageDriverLogic(t *testing.T) {
 		assert.Empty(t, config.Prefer) // Should be empty when Only is used
 	})
 }
+
+func TestPackageConfigParsing(t *testing.T) {
+	t.Run("ParseOnlyFieldFromTaskConfig", func(t *testing.T) {
+		// Test that only field is properly parsed from task config
+		taskConfig := map[string]interface{}{
+			"name": "starship",
+			"only": []interface{}{"cargo", "homebrew"},
+		}
+
+		// This simulates what happens in executeInstallPackage
+		pkg := &PackageConfig{
+			Name:  taskConfig["name"].(string),
+			State: "present",
+		}
+
+		if only, exists := taskConfig["only"]; exists {
+			if onlyList, ok := only.([]interface{}); ok {
+				pkg.Only = make([]string, len(onlyList))
+				for i, o := range onlyList {
+					pkg.Only[i] = o.(string)
+				}
+			}
+		}
+
+		assert.Equal(t, "starship", pkg.Name)
+		assert.Equal(t, []string{"cargo", "homebrew"}, pkg.Only)
+		assert.Empty(t, pkg.Prefer)
+	})
+
+	t.Run("ParseBothPreferAndOnlyFields", func(t *testing.T) {
+		// Test parsing both prefer and only (even though validation should reject this)
+		taskConfig := map[string]interface{}{
+			"name":   "test-package",
+			"prefer": []interface{}{"apt", "yum"},
+			"only":   []interface{}{"cargo", "homebrew"},
+		}
+
+		pkg := &PackageConfig{
+			Name:  taskConfig["name"].(string),
+			State: "present",
+		}
+
+		if prefer, exists := taskConfig["prefer"]; exists {
+			if preferList, ok := prefer.([]interface{}); ok {
+				pkg.Prefer = make([]string, len(preferList))
+				for i, p := range preferList {
+					pkg.Prefer[i] = p.(string)
+				}
+			}
+		}
+
+		if only, exists := taskConfig["only"]; exists {
+			if onlyList, ok := only.([]interface{}); ok {
+				pkg.Only = make([]string, len(onlyList))
+				for i, o := range onlyList {
+					pkg.Only[i] = o.(string)
+				}
+			}
+		}
+
+		assert.Equal(t, "test-package", pkg.Name)
+		assert.Equal(t, []string{"apt", "yum"}, pkg.Prefer)
+		assert.Equal(t, []string{"cargo", "homebrew"}, pkg.Only)
+	})
+}

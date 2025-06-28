@@ -237,6 +237,15 @@ func (m *PackagesModule) executeInstallPackage(task *config.Task, ctx *modules.E
 		}
 	}
 
+	if only, exists := task.Config["only"]; exists {
+		if onlyList, ok := only.([]interface{}); ok {
+			pkg.Only = make([]string, len(onlyList))
+			for i, o := range onlyList {
+				pkg.Only[i] = o.(string)
+			}
+		}
+	}
+
 	// Parse check_system_wide
 	if checkSystemWide, exists := task.Config["check_system_wide"]; exists {
 		pkg.CheckSystemWide = checkSystemWide.(bool)
@@ -266,6 +275,15 @@ func (m *PackagesModule) executeUninstallPackage(task *config.Task, ctx *modules
 			pkg.Prefer = make([]string, len(preferList))
 			for i, p := range preferList {
 				pkg.Prefer[i] = p.(string)
+			}
+		}
+	}
+
+	if only, exists := task.Config["only"]; exists {
+		if onlyList, ok := only.([]interface{}); ok {
+			pkg.Only = make([]string, len(onlyList))
+			for i, o := range onlyList {
+				pkg.Only[i] = o.(string)
 			}
 		}
 	}
@@ -311,6 +329,16 @@ func (m *PackagesModule) executeManagePackages(task *config.Task, ctx *modules.E
 				packageObj.Prefer = make([]string, len(preferList))
 				for i, p := range preferList {
 					packageObj.Prefer[i] = p.(string)
+				}
+			}
+		}
+
+		// Parse only list
+		if only, exists := pkgConfig["only"]; exists {
+			if onlyList, ok := only.([]interface{}); ok {
+				packageObj.Only = make([]string, len(onlyList))
+				for i, o := range onlyList {
+					packageObj.Only[i] = o.(string)
 				}
 			}
 		}
@@ -560,6 +588,15 @@ func (m *PackagesModule) planInstallPackage(task *config.Task, ctx *modules.Exec
 		}
 	}
 
+	if only, exists := task.Config["only"]; exists {
+		if onlyList, ok := only.([]interface{}); ok {
+			pkg.Only = make([]string, len(onlyList))
+			for i, o := range onlyList {
+				pkg.Only[i] = o.(string)
+			}
+		}
+	}
+
 	// Parse check_system_wide
 	if checkSystemWide, exists := task.Config["check_system_wide"]; exists {
 		pkg.CheckSystemWide = checkSystemWide.(bool)
@@ -588,6 +625,15 @@ func (m *PackagesModule) planUninstallPackage(task *config.Task, ctx *modules.Ex
 			pkg.Prefer = make([]string, len(preferList))
 			for i, p := range preferList {
 				pkg.Prefer[i] = p.(string)
+			}
+		}
+	}
+
+	if only, exists := task.Config["only"]; exists {
+		if onlyList, ok := only.([]interface{}); ok {
+			pkg.Only = make([]string, len(onlyList))
+			for i, o := range onlyList {
+				pkg.Only[i] = o.(string)
 			}
 		}
 	}
@@ -643,6 +689,16 @@ func (m *PackagesModule) planManagePackages(task *config.Task, ctx *modules.Exec
 				packageObj.Prefer = make([]string, len(preferList))
 				for i, p := range preferList {
 					packageObj.Prefer[i] = p.(string)
+				}
+			}
+		}
+
+		// Parse only list
+		if only, exists := pkgConfig["only"]; exists {
+			if onlyList, ok := only.([]interface{}); ok {
+				packageObj.Only = make([]string, len(onlyList))
+				for i, o := range onlyList {
+					packageObj.Only[i] = o.(string)
 				}
 			}
 		}
