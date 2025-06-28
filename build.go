@@ -176,7 +176,7 @@ func build(target BuildTarget, suffix string) error {
 		"build",
 		"-ldflags", ldflags,
 		"-o", outputPath,
-		filepath.Join(cmdDir, "main.go"),
+		"./" + cmdDir,
 	}
 
 	cmd := exec.Command("go", args...)

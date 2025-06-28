@@ -75,27 +75,11 @@ package management integration, and works seamlessly across Windows, macOS, and 
 		},
 	}
 
-	// Add init command placeholder
-	initCmd := &cobra.Command{
-		Use:   "init",
-		Short: "Initialize a new dotfiles repository",
-		Run: func(cmd *cobra.Command, args []string) {
-			log := logger.Get()
-			log.Info().Msg("Initializing dotfiles repository...")
-			log.Warn().Msg("Command not yet implemented")
-		},
-	}
+	// Add init command
+	initCmd := createInitCommand()
 
-	// Add apply command placeholder
-	applyCmd := &cobra.Command{
-		Use:   "apply",
-		Short: "Apply dotfiles configuration (symlinks, packages, scripts)",
-		Run: func(cmd *cobra.Command, args []string) {
-			log := logger.Get()
-			log.Info().Msg("Applying dotfiles configuration...")
-			log.Warn().Msg("Command not yet implemented")
-		},
-	}
+	// Add apply command
+	applyCmd := createApplyCommand()
 
 	// Add backup command
 	backupCmd := &cobra.Command{
@@ -180,6 +164,15 @@ Use --check to only check for updates without installing.`,
 	}
 	updateCmd.Flags().Bool("check", false, "Only check for updates without installing")
 
+	// Add variables command
+	variablesCmd := createVariablesCommand()
+
+	// Add plan command
+	planCmd := createPlanCommand()
+
+	// Add explain command
+	explainCmd := createExplainCommand()
+
 	// Add commands to root
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(infoCmd)
@@ -190,6 +183,9 @@ Use --check to only check for updates without installing.`,
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(validateCmd)
 	rootCmd.AddCommand(updateCmd)
+	rootCmd.AddCommand(variablesCmd)
+	rootCmd.AddCommand(planCmd)
+	rootCmd.AddCommand(explainCmd)
 
 	// Execute the root command
 	if err := rootCmd.Execute(); err != nil {

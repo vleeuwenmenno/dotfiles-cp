@@ -127,45 +127,15 @@ dotfiles-cp/
 
 ## 🎯 **Planned Configuration Structure**
 
-```yaml
-metadata:
-  name: "My Dotfiles"
-  version: "1.0.0"
-  author: "User Name"
-  description: "Personal dotfiles configuration"
+I'd like to make it so that every dotfiles repository starts with a `dotfiles.yaml` file in the root directory. From there the application will load the configuration and apply it to the dotfiles.
 
-settings:
-  backup_dir: "~/.dotfiles-backup"    # Where to backup existing files
-  template_dir: "templates"           # Directory containing template files
-  target_dir: "~"                     # Base directory for file placement
-  log_level: "info"
+There's also a variables/ folder which contains yaml files that get loaded for the template system.
+Every/any folder inside variables/ that starts with index.yaml will be loaded first. From there imports could be done to load additional variables.
 
-variables:
-  git_user: "Your Name"               # Variables available in templates
-  git_email: "your.email@example.com"
+Same with state/ and any other folder that starts with index.yaml.
+Under state/ are the template files that actually get processed for the dotfiles stuff.
 
-platforms:
-  - name: "windows"
-    conditions:
-      os: "windows"
-    packages:                         # Installed via package managers
-      chocolatey: [git, vscode]
-      winget: [Microsoft.PowerShell]
-    files:                           # Files to create/symlink
-      - source: "templates/powershell/profile.ps1.tmpl"
-        target: "~/Documents/PowerShell/Microsoft.PowerShell_profile.ps1"
-        template: true               # Process as Go template
-        
-  - name: "macos"
-    conditions:
-      os: "darwin"
-    packages:
-      homebrew: [git, neovim]
-    files:
-      - source: "templates/zsh/zshrc.tmpl"
-        target: "~/.zshrc"
-        template: true
-```
+the `dotfiles.yaml` file in the root allows the user to configure these paths to different locations and the index.yaml to different names if they so desire.
 
 ## 🚧 **Phase 2 - Core Implementation (Next)**
 
