@@ -174,6 +174,7 @@ func NewDriverRegistry() *DriverRegistry {
 	registry.RegisterDriver(NewScoopDriver())
 	registry.RegisterDriver(NewWingetDriver())
 	registry.RegisterDriver(NewAptDriver())
+	registry.RegisterDriver(NewApkDriver())
 	registry.RegisterDriver(NewYumDriver())
 	registry.RegisterDriver(NewDnfDriver())
 	registry.RegisterDriver(NewBrewDriver())
@@ -235,7 +236,7 @@ func (r *DriverRegistry) GetAvailableDrivers() []PackageDriver {
 		}
 	case "linux":
 		driverOrder = []string{
-			"apt", "dnf", "yum",            // Linux-native managers first
+			"apt", "apk", "dnf", "yum",     // Linux-native managers first
 			"cargo",                         // Cross-platform managers
 		}
 	default:

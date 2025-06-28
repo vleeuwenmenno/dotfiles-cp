@@ -458,7 +458,7 @@ func (m *PackagesModule) isValidPackageManager(manager string) bool {
 	validManagers := []string{
 		"winget", "chocolatey", "scoop",    // Windows
 		"homebrew",                         // macOS
-		"apt", "yum", "dnf",               // Linux
+		"apt", "apk", "yum", "dnf",        // Linux
 		"cargo",                           // Cross-platform (Rust)
 	}
 

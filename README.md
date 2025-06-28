@@ -4,9 +4,9 @@ A powerful cross-platform dotfiles manager with templating support, built in Go.
 
 ## Features
 
-- 🚀 **Cross-platform**: Windows 11, macOS, and Linux support
+- 🚀 **Cross-platform**: Windows 11, macOS, and various Linux distributions supported
 - 🐚 **Multi-shell**: PowerShell, Bash, ZSH support
-- 📦 **Package managers**: Chocolatey, Winget, Homebrew, APT, YUM/DNF support
+- 📦 **Package managers**: Chocolatey, Scoop, Winget, Homebrew, APT, YUM/DNF and apk support
 - 🎨 **Templating**: Go templates with conditional logic and variables
 - ⚙️ **Flexible configuration**: YAML-based with platform-specific overrides
 - 🔗 **Smart linking**: Automatic symlink management with backups
