@@ -334,5 +334,5 @@ go install github.com/vleeuwenmenno/dotfiles-cp/cmd/dotfiles@v1.0.0
 
 ## Support
 
-- 📖 [Documentation](https://github.com/vleeuwenmenno/dotfiles-cp/docs/index.md)
+- 📖 [Documentation](https://github.com/vleeuwenmenno/dotfiles-cp/blob/main/docs/index.md)
 - 🐛 [Issue Tracker](https://github.com/vleeuwenmenno/dotfiles-cp/issues)
