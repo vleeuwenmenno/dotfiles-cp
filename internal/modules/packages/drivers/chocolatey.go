@@ -2,6 +2,7 @@ package drivers
 
 import (
 	"fmt"
+	"os/exec"
 	"runtime"
 	"strings"
 )
@@ -16,6 +17,55 @@ func NewChocolateyDriver() *ChocolateyDriver {
 	return &ChocolateyDriver{
 		BaseDriver: NewBaseDriver("chocolatey", "choco"),
 	}
+}
+
+// RunCommand executes a command with elevated permissions for Chocolatey
+func (d *ChocolateyDriver) RunCommand(args ...string) (string, error) {
+	// On Windows, run Chocolatey commands with sudo for elevation
+	if runtime.GOOS == "windows" {
+		// Check if sudo is available (Windows 11+ or via WSL)
+		if _, err := exec.LookPath("sudo"); err == nil {
+			// Use sudo to run chocolatey with elevation
+			sudoArgs := append([]string{"choco"}, args...)
+			cmd := exec.Command("sudo", sudoArgs...)
+			output, err := cmd.CombinedOutput()
+			return strings.TrimSpace(string(output)), err
+		} else {
+			// Fallback: enhance args to handle UAC and permission issues
+			enhancedArgs := make([]string, len(args))
+			copy(enhancedArgs, args)
+
+			// Add force flags for install/uninstall operations to bypass prompts
+			if len(args) > 0 {
+				switch args[0] {
+				case "install", "upgrade":
+					// Add flags to bypass confirmation prompts if not already present
+					enhancedArgs = addFlagIfNotPresent(enhancedArgs, "--force")
+					enhancedArgs = addFlagIfNotPresent(enhancedArgs, "--accept-license")
+				case "uninstall":
+					// Add flags to bypass confirmation prompts if not already present
+					enhancedArgs = addFlagIfNotPresent(enhancedArgs, "--force")
+				}
+			}
+
+			cmd := exec.Command("choco", enhancedArgs...)
+			output, err := cmd.CombinedOutput()
+			return strings.TrimSpace(string(output)), err
+		}
+	}
+
+	// For non-Windows systems, use the base implementation
+	return d.BaseDriver.RunCommand(args...)
+}
+
+// addFlagIfNotPresent adds a flag to args if it's not already present
+func addFlagIfNotPresent(args []string, flag string) []string {
+	for _, arg := range args {
+		if arg == flag {
+			return args // Flag already present
+		}
+	}
+	return append(args, flag)
 }
 
 // IsPackageInstalled checks if a package is installed via Chocolatey
