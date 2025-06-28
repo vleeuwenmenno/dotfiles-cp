@@ -176,10 +176,12 @@ func NewDriverRegistry() *DriverRegistry {
 	registry.RegisterDriver(NewYumDriver())
 	registry.RegisterDriver(NewDnfDriver())
 	registry.RegisterDriver(NewBrewDriver())
+	registry.RegisterDriver(NewCargoDriver())
 
 	// Register common aliases
 	registry.RegisterAlias("choco", "chocolatey")
 	registry.RegisterAlias("brew", "homebrew")
+	registry.RegisterAlias("rust", "cargo")
 
 	return registry
 }

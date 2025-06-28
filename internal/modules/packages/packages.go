@@ -419,6 +419,7 @@ func (m *PackagesModule) isValidPackageManager(manager string) bool {
 		"winget", "chocolatey", "scoop",    // Windows
 		"homebrew",                         // macOS
 		"apt", "yum", "dnf",               // Linux
+		"cargo",                           // Cross-platform (Rust)
 	}
 
 	for _, valid := range validManagers {
