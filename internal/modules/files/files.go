@@ -275,7 +275,7 @@ func (m *FilesModule) executeEnsureFile(task *config.Task, ctx *modules.Executio
 
 		// Check if we should render the content as a template
 		if render, exists := task.Config["render"]; exists && render.(bool) {
-			content, err = m.processTemplate(content, ctx.Variables)
+			content, err = m.processTemplateWithPathConversion(content, ctx.Variables, false)
 			if err != nil {
 				return fmt.Errorf("failed to render content template: %w", err)
 			}
@@ -283,7 +283,7 @@ func (m *FilesModule) executeEnsureFile(task *config.Task, ctx *modules.Executio
 	} else if contentStr, exists := task.Config["content"]; exists {
 		// Use inline content (always process as template for backward compatibility)
 		if contentString, ok := contentStr.(string); ok {
-			content, err = m.processTemplate(contentString, ctx.Variables)
+			content, err = m.processTemplateWithPathConversion(contentString, ctx.Variables, false)
 			if err != nil {
 				return fmt.Errorf("failed to process content template: %w", err)
 			}
@@ -801,6 +801,10 @@ func (m *FilesModule) ListActions() []*modules.ActionDocumentation {
 
 // processTemplate processes a template string with variables
 func (m *FilesModule) processTemplate(templateStr string, variables map[string]interface{}) (string, error) {
+	return m.processTemplateWithPathConversion(templateStr, variables, true)
+}
+
+func (m *FilesModule) processTemplateWithPathConversion(templateStr string, variables map[string]interface{}, convertPaths bool) (string, error) {
 	tmpl := template.New("files").Option("missingkey=zero").Funcs(template.FuncMap{
 		"pathJoin":  func(paths ...string) string { return filepath.Join(paths...) },
 		"pathSep":   func() string { return string(filepath.Separator) },
@@ -817,7 +821,11 @@ func (m *FilesModule) processTemplate(templateStr string, variables map[string]i
 		return "", fmt.Errorf("failed to execute template: %w", err)
 	}
 
-	// Ensure OS-specific path separators
 	renderedResult := result.String()
-	return filepath.FromSlash(renderedResult), nil
+	if convertPaths {
+		// Ensure OS-specific path separators for file paths
+		return filepath.FromSlash(renderedResult), nil
+	}
+	// Return as-is for content (don't convert path separators)
+	return renderedResult, nil
 }
