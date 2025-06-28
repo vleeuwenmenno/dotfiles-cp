@@ -2,6 +2,7 @@ package drivers
 
 import (
 	"fmt"
+	"os/exec"
 	"strings"
 )
 
@@ -59,7 +60,7 @@ func (d *YumDriver) fetchAllInstalledPackages() (map[string]bool, error) {
 
 // InstallPackage installs a package using YUM
 func (d *YumDriver) InstallPackage(packageName string) error {
-	output, err := d.RunCommand("install", "-y", packageName)
+	output, err := d.RunCommandWithSudo("install", "-y", packageName)
 	if err != nil {
 		return fmt.Errorf("failed to install package %s via YUM: %w\nOutput: %s", packageName, err, output)
 	}
@@ -68,7 +69,7 @@ func (d *YumDriver) InstallPackage(packageName string) error {
 
 // UninstallPackage uninstalls a package using YUM
 func (d *YumDriver) UninstallPackage(packageName string) error {
-	output, err := d.RunCommand("remove", "-y", packageName)
+	output, err := d.RunCommandWithSudo("remove", "-y", packageName)
 	if err != nil {
 		return fmt.Errorf("failed to uninstall package %s via YUM: %w\nOutput: %s", packageName, err, output)
 	}
@@ -179,12 +180,25 @@ func (d *YumDriver) IsAvailable() bool {
 		return false
 	}
 
-	// For YUM operations, we typically need sudo for install/remove
-	// But we can still check package status without it
+	// Check if sudo is available (needed for install/remove operations)
+	_, err := exec.LookPath("sudo")
+	if err != nil {
+		return false
+	}
+
 	return true
 }
 
 // GetAllInstalledPackages returns a map of all installed packages
 func (d *YumDriver) GetAllInstalledPackages() (map[string]bool, error) {
 	return d.fetchAllInstalledPackages()
+}
+
+// RunCommandWithSudo executes a YUM command with sudo privileges
+func (d *YumDriver) RunCommandWithSudo(args ...string) (string, error) {
+	// Prepend sudo to the command
+	sudoArgs := append([]string{d.executable}, args...)
+	cmd := exec.Command("sudo", sudoArgs...)
+	output, err := cmd.CombinedOutput()
+	return strings.TrimSpace(string(output)), err
 }

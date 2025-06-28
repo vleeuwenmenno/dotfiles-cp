@@ -2,6 +2,7 @@ package drivers
 
 import (
 	"fmt"
+	"os/exec"
 	"strings"
 )
 
@@ -96,13 +97,13 @@ func (d *AptDriver) fetchAllInstalledPackagesDpkg() (map[string]bool, error) {
 // InstallPackage installs a package using APT
 func (d *AptDriver) InstallPackage(packageName string) error {
 	// Update package list first (only if not updated recently)
-	_, updateErr := d.RunCommand("update")
+	_, updateErr := d.RunCommandWithSudo("update")
 	if updateErr != nil {
 		// Log warning but continue - update might fail due to permissions
 		// but installation might still work
 	}
 
-	output, err := d.RunCommand("install", "-y", packageName)
+	output, err := d.RunCommandWithSudo("install", "-y", packageName)
 	if err != nil {
 		return fmt.Errorf("failed to install package %s via APT: %w\nOutput: %s", packageName, err, output)
 	}
@@ -111,7 +112,7 @@ func (d *AptDriver) InstallPackage(packageName string) error {
 
 // UninstallPackage uninstalls a package using APT
 func (d *AptDriver) UninstallPackage(packageName string) error {
-	output, err := d.RunCommand("remove", "-y", packageName)
+	output, err := d.RunCommandWithSudo("remove", "-y", packageName)
 	if err != nil {
 		return fmt.Errorf("failed to uninstall package %s via APT: %w\nOutput: %s", packageName, err, output)
 	}
@@ -211,6 +212,15 @@ func (d *AptDriver) GetAllInstalledPackages() (map[string]bool, error) {
 	return d.fetchAllInstalledPackages()
 }
 
+// RunCommandWithSudo executes an APT command with sudo privileges
+func (d *AptDriver) RunCommandWithSudo(args ...string) (string, error) {
+	// Prepend sudo to the command
+	sudoArgs := append([]string{d.executable}, args...)
+	cmd := exec.Command("sudo", sudoArgs...)
+	output, err := cmd.CombinedOutput()
+	return strings.TrimSpace(string(output)), err
+}
+
 // IsAvailable overrides the base implementation to also check for sudo
 func (d *AptDriver) IsAvailable() bool {
 	// Check if apt is available
@@ -218,7 +228,11 @@ func (d *AptDriver) IsAvailable() bool {
 		return false
 	}
 
-	// For APT operations, we typically need sudo for install/remove
-	// But we can still check package status without it
+	// Check if sudo is available (needed for install/remove operations)
+	_, err := exec.LookPath("sudo")
+	if err != nil {
+		return false
+	}
+
 	return true
 }
