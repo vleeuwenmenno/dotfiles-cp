@@ -11,7 +11,7 @@ Conditions allow you to conditionally include imports or execute tasks based on 
 All conditions are wrapped in template syntax and evaluated as boolean expressions:
 
 ```yaml
-condition: "eq .Platform.OS \"linux\""
+condition: 'eq .Platform.OS "linux"'
 ```
 
 ## Available Functions
@@ -100,13 +100,13 @@ condition: "or (and (eq .Platform.OS \"windows\") .Platform.IsElevated) (and (ne
 ```yaml
 imports:
   - path: platforms/linux.yaml
-    condition: "eq .Platform.OS \"linux\""
+    condition: 'eq .Platform.OS "linux"'
 
   - path: platforms/windows.yaml
-    condition: "eq .Platform.OS \"windows\""
+    condition: 'eq .Platform.OS "windows"'
 
   - path: distros/alpine.yaml
-    condition: "and (eq .Platform.OS \"linux\") (eq .Platform.Distro \"Alpine Linux\")"
+    condition: 'and (eq .Platform.OS "linux") (eq .Platform.Distro "Alpine Linux")'
 ```
 
 ### Shell-Specific Tasks
@@ -115,11 +115,11 @@ imports:
 ensure_file:
   - path: "{{ .Platform.HomeDir }}/.bashrc"
     content_source: "files/bashrc"
-    condition: "eq .Platform.Shell \"bash\""
+    condition: 'eq .Platform.Shell "bash"'
 
   - path: "{{ .Platform.HomeDir }}/.zshrc"
     content_source: "files/zshrc"
-    condition: "eq .Platform.Shell \"zsh\""
+    condition: 'eq .Platform.Shell "zsh"'
 ```
 
 ### Privilege-Based Tasks
@@ -190,10 +190,11 @@ dotfiles variables get Platform.Distro
 You can combine multiple conditions in complex ways:
 
 ```yaml
-condition: "and (or (eq .Platform.OS \"linux\") (eq .Platform.OS \"darwin\")) (and (eq .Platform.Arch \"amd64\") (not .Platform.IsElevated))"
+condition: 'and (or (eq .Platform.OS "linux") (eq .Platform.OS "darwin")) (and (eq .Platform.Arch "amd64") (not .Platform.IsElevated))'
 ```
 
 This condition is true when:
+
 - Platform is Linux OR macOS
 - AND architecture is amd64
 - AND NOT running with elevated privileges
@@ -205,4 +206,75 @@ You can also reference environment variables in conditions:
 ```yaml
 condition: "eq .Env.USER \"developer\""
 condition: "and (eq .Platform.OS \"linux\") (ne .Env.HOME \"\")"
+```
+
+## YAML Configuration Issues
+
+### Duplicate Key Errors
+
+One common issue when writing configuration files with conditions is YAML duplicate key errors:
+
+```yaml
+# ❌ WRONG - Duplicate keys not allowed in YAML
+ensure_dir:
+  - path: "/tmp/linux-only"
+    condition: 'eq .Platform.OS "linux"'
+
+ensure_dir:  # ERROR: Duplicate key
+  - path: "/tmp/windows-only"
+    condition: 'eq .Platform.OS "windows"'
+```
+
+**Solution**: Combine all tasks of the same type under a single key:
+
+```yaml
+# ✅ CORRECT - Single key with multiple items
+ensure_dir:
+  - path: "/tmp/linux-only"
+    condition: 'eq .Platform.OS "linux"'
+  - path: "/tmp/windows-only"
+    condition: 'eq .Platform.OS "windows"'
+  - path: "/tmp/elevated-only"
+    condition: ".Platform.IsElevated"
+```
+
+### Quote Handling
+
+Be careful with nested quotes in conditions:
+
+```yaml
+# ✅ Use single quotes for condition, double quotes inside
+condition: 'eq .Platform.OS "linux"'
+
+# ✅ Or escape double quotes
+condition: "eq .Platform.OS \"linux\""
+
+# ❌ Mixing quotes incorrectly
+condition: "eq .Platform.OS 'linux'"
+```
+
+### Complex YAML Structures
+
+For complex configurations with conditions:
+
+```yaml
+# Multiple packages with individual conditions
+install_package:
+  - name: "git"
+    condition: 'or (eq .Platform.OS "linux") (eq .Platform.OS "darwin")'
+
+  - name: "windows-tool"
+    condition: 'eq .Platform.OS "windows"'
+
+  - name: "admin-tool"
+    condition: "or .Platform.IsElevated .Platform.IsRoot"
+
+# Complex manage_packages with conditions
+manage_packages:
+  packages:
+    - name: "development-tools"
+      state: "present"
+    - name: "legacy-package"
+      state: "absent"
+  condition: 'and .Platform.IsElevated (ne .Platform.OS "linux")'
 ```

@@ -186,9 +186,8 @@ func outputActionText(action *modules.ActionDocumentation) {
 		for i, example := range action.Examples {
 			fmt.Printf("  %d. %s\n", i+1, example.Description)
 
-			// Format config as YAML-like for readability
-			fmt.Printf("     action: %s\n", action.Action)
-			fmt.Printf("     config:\n")
+			// Format config as proper YAML with action key
+			fmt.Printf("     %s:\n", action.Action)
 
 			// Sort config keys for consistent output
 			keys := make([]string, 0, len(example.Config))
@@ -197,15 +196,28 @@ func outputActionText(action *modules.ActionDocumentation) {
 			}
 			sort.Strings(keys)
 
-			for _, key := range keys {
+			fmt.Printf("       - ")
+			for j, key := range keys {
 				value := example.Config[key]
+				if j > 0 {
+					fmt.Printf("         ")
+				}
 				switch v := value.(type) {
 				case string:
-					fmt.Printf("       %s: \"%s\"\n", key, v)
+					// Handle multiline strings
+					if strings.Contains(v, "\n") {
+						fmt.Printf("%s: |\n", key)
+						lines := strings.Split(v, "\n")
+						for _, line := range lines {
+							fmt.Printf("           %s\n", line)
+						}
+					} else {
+						fmt.Printf("%s: \"%s\"\n", key, v)
+					}
 				case bool:
-					fmt.Printf("       %s: %t\n", key, v)
+					fmt.Printf("%s: %t\n", key, v)
 				default:
-					fmt.Printf("       %s: %v\n", key, v)
+					fmt.Printf("%s: %v\n", key, v)
 				}
 			}
 

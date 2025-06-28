@@ -29,7 +29,7 @@ func (m *FilesModule) Name() string {
 
 // ActionKeys returns the action keys this module handles
 func (m *FilesModule) ActionKeys() []string {
-	return []string{"ensure_dir", "ensure_file", "copy"}
+	return []string{"ensure_dir", "ensure_file"}
 }
 
 // ValidateTask validates a file task configuration
@@ -39,8 +39,6 @@ func (m *FilesModule) ValidateTask(task *config.Task) error {
 		return m.validateEnsureDirTask(task.Config)
 	case "ensure_file":
 		return m.validateEnsureFileTask(task.Config)
-	case "copy":
-		return m.validateCopyTask(task.Config)
 	default:
 		return fmt.Errorf("files module does not handle action '%s'", task.Action)
 	}
@@ -57,8 +55,6 @@ func (m *FilesModule) ExecuteTask(task *config.Task, ctx *modules.ExecutionConte
 		return m.executeEnsureDir(task, ctx)
 	case "ensure_file":
 		return m.executeEnsureFile(task, ctx)
-	case "copy":
-		return m.executeCopy(task, ctx)
 	default:
 		return fmt.Errorf("files module does not handle action '%s'", task.Action)
 	}
@@ -71,8 +67,6 @@ func (m *FilesModule) PlanTask(task *config.Task, ctx *modules.ExecutionContext)
 		return m.planEnsureDir(task, ctx)
 	case "ensure_file":
 		return m.planEnsureFile(task, ctx)
-	case "copy":
-		return m.planCopy(task, ctx)
 	default:
 		return nil, fmt.Errorf("files module does not handle action '%s'", task.Action)
 	}
@@ -130,22 +124,7 @@ func (m *FilesModule) validateEnsureFileTask(config map[string]interface{}) erro
 	return nil
 }
 
-// validateCopyTask validates copy task configuration
-func (m *FilesModule) validateCopyTask(config map[string]interface{}) error {
-	if _, exists := config["src"]; !exists {
-		return fmt.Errorf("copy task requires 'src' field")
-	}
-	if _, ok := config["src"].(string); !ok {
-		return fmt.Errorf("copy 'src' must be a string")
-	}
-	if _, exists := config["dst"]; !exists {
-		return fmt.Errorf("copy task requires 'dst' field")
-	}
-	if _, ok := config["dst"].(string); !ok {
-		return fmt.Errorf("copy 'dst' must be a string")
-	}
-	return nil
-}
+
 
 // executeEnsureDir ensures a directory exists with proper permissions
 func (m *FilesModule) executeEnsureDir(task *config.Task, ctx *modules.ExecutionContext) error {
@@ -335,57 +314,7 @@ func (m *FilesModule) executeEnsureFile(task *config.Task, ctx *modules.Executio
 	return nil
 }
 
-// executeCopy copies a file from source to destination
-func (m *FilesModule) executeCopy(task *config.Task, ctx *modules.ExecutionContext) error {
-	// Process templates in src and dst paths
-	src, err := m.processTemplate(task.Config["src"].(string), ctx.Variables)
-	if err != nil {
-		return fmt.Errorf("failed to process src template: %w", err)
-	}
 
-	dst, err := m.processTemplate(task.Config["dst"].(string), ctx.Variables)
-	if err != nil {
-		return fmt.Errorf("failed to process dst template: %w", err)
-	}
-
-	// Resolve source path relative to base path
-	if !filepath.IsAbs(src) {
-		src = filepath.Join(ctx.BasePath, src)
-	}
-
-	// Expand destination path
-	dst, err = utils.ExpandPath(dst)
-	if err != nil {
-		return fmt.Errorf("failed to expand destination path: %w", err)
-	}
-
-	// Check if source exists
-	if !utils.FileExists(src) {
-		return fmt.Errorf("source file does not exist: %s", src)
-	}
-
-	// Ensure destination directory exists
-	if err := utils.EnsureDir(filepath.Dir(dst)); err != nil {
-		return fmt.Errorf("failed to create destination directory: %w", err)
-	}
-
-	if ctx.Verbose {
-		fmt.Printf("Copying file: %s -> %s\n", src, dst)
-	}
-
-	// Read source file
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return fmt.Errorf("failed to read source file: %w", err)
-	}
-
-	// Write to destination
-	if err := os.WriteFile(dst, data, 0644); err != nil {
-		return fmt.Errorf("failed to write destination file: %w", err)
-	}
-
-	return nil
-}
 
 // planEnsureDir returns what ensure_dir would do
 func (m *FilesModule) planEnsureDir(task *config.Task, ctx *modules.ExecutionContext) (*modules.TaskPlan, error) {
@@ -582,58 +511,7 @@ func (m *FilesModule) planEnsureFile(task *config.Task, ctx *modules.ExecutionCo
 	return plan, nil
 }
 
-// planCopy returns what copy would do
-func (m *FilesModule) planCopy(task *config.Task, ctx *modules.ExecutionContext) (*modules.TaskPlan, error) {
-	// Process templates in src and dst paths
-	src, err := m.processTemplate(task.Config["src"].(string), ctx.Variables)
-	if err != nil {
-		return nil, fmt.Errorf("failed to process src template: %w", err)
-	}
 
-	dst, err := m.processTemplate(task.Config["dst"].(string), ctx.Variables)
-	if err != nil {
-		return nil, fmt.Errorf("failed to process dst template: %w", err)
-	}
-
-	// Resolve source path relative to base path
-	if !filepath.IsAbs(src) {
-		src = filepath.Join(ctx.BasePath, src)
-	}
-
-	// Expand destination path
-	dst, err = utils.ExpandPath(dst)
-	if err != nil {
-		return nil, fmt.Errorf("failed to expand destination path: %w", err)
-	}
-
-	plan := &modules.TaskPlan{
-		TaskID:      task.ID,
-		Action:      task.Action,
-		Description: fmt.Sprintf("Copy %s -> %s", src, dst),
-		Changes:     []string{},
-	}
-
-	// Check if source exists
-	if !utils.FileExists(src) {
-		plan.WillSkip = true
-		plan.SkipReason = fmt.Sprintf("Source file does not exist: %s", src)
-		return plan, nil
-	}
-
-	// Check what changes would be made
-	if utils.FileExists(dst) {
-		plan.Changes = append(plan.Changes, "Overwrite existing file")
-	} else {
-		plan.Changes = append(plan.Changes, "Create new file")
-		// Check if destination directory needs to be created
-		dstDir := filepath.Dir(dst)
-		if !utils.FileExists(dstDir) {
-			plan.Changes = append(plan.Changes, fmt.Sprintf("Create directory %s", dstDir))
-		}
-	}
-
-	return plan, nil
-}
 
 // ExplainAction returns documentation for a specific action
 func (m *FilesModule) ExplainAction(action string) (*modules.ActionDocumentation, error) {
@@ -671,13 +549,13 @@ func (m *FilesModule) ListActions() []*modules.ActionDocumentation {
 				{
 					Description: "Create a basic directory",
 					Config: map[string]interface{}{
-						"path": "{{ .home }}/.config/myapp",
+						"path": "{{ .paths.home }}/.config/myapp",
 					},
 				},
 				{
 					Description: "Create a directory with specific permissions",
 					Config: map[string]interface{}{
-						"path": "{{ .home }}/.ssh",
+						"path": "{{ .paths.home }}/.ssh",
 						"mode": "0700",
 					},
 				},
@@ -725,20 +603,20 @@ func (m *FilesModule) ListActions() []*modules.ActionDocumentation {
 				{
 					Description: "Create an empty file",
 					Config: map[string]interface{}{
-						"path": "{{ .home }}/.config/myapp/config.txt",
+						"path": "{{ .paths.home }}/.config/myapp/config.txt",
 					},
 				},
 				{
 					Description: "Create a file with inline content",
 					Config: map[string]interface{}{
-						"path":    "{{ .home }}/.gitconfig",
-						"content": "[user]\n    name = {{ .git_user_name }}\n    email = {{ .git_user_email }}",
+						"path":    "{{ .paths.home }}/.gitconfig",
+						"content": "[user]\n    name = {{ .user.git_name }}\n    email = {{ .user.git_email }}",
 					},
 				},
 				{
 					Description: "Create a file from a template source",
 					Config: map[string]interface{}{
-						"path":           "{{ .home }}/.ssh/config",
+						"path":           "{{ .paths.home }}/.ssh/config",
 						"content_source": "files/templates/ssh/config.tmpl",
 						"render":         true,
 						"mode":           "0600",
@@ -747,7 +625,7 @@ func (m *FilesModule) ListActions() []*modules.ActionDocumentation {
 				{
 					Description: "Copy a file without templating",
 					Config: map[string]interface{}{
-						"path":           "{{ .home }}/.config/app/config.json",
+						"path":           "{{ .paths.home }}/.config/app/config.json",
 						"content_source": "files/config/app.json",
 						"render":         false,
 					},
@@ -755,47 +633,14 @@ func (m *FilesModule) ListActions() []*modules.ActionDocumentation {
 				{
 					Description: "Create an executable script",
 					Config: map[string]interface{}{
-						"path":    "{{ .home }}/bin/myscript.sh",
+						"path":    "{{ .paths.home }}/bin/myscript.sh",
 						"content": "#!/bin/bash\necho 'Hello World'",
 						"mode":    "0755",
 					},
 				},
 			},
 		},
-		{
-			Action:      "copy",
-			Description: "Copies a file from the dotfiles repository to a destination path. Creates necessary parent directories if they don't exist.",
-			Parameters: []modules.ActionParameter{
-				{
-					Name:        "src",
-					Type:        "string",
-					Required:    true,
-					Description: "The source file path relative to the dotfiles repository root. Supports template variables.",
-				},
-				{
-					Name:        "dst",
-					Type:        "string",
-					Required:    true,
-					Description: "The destination file path. Supports template variables and path expansion (e.g., ~ for home directory).",
-				},
-			},
-			Examples: []modules.ActionExample{
-				{
-					Description: "Copy a configuration file",
-					Config: map[string]interface{}{
-						"src": "config/nvim/init.vim",
-						"dst": "{{ .home }}/.config/nvim/init.vim",
-					},
-				},
-				{
-					Description: "Copy with platform-specific destination",
-					Config: map[string]interface{}{
-						"src": "config/git/gitconfig",
-						"dst": "{{ .home }}/.gitconfig",
-					},
-				},
-			},
-		},
+
 	}
 }
 

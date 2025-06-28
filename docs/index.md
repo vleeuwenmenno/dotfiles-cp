@@ -1,6 +1,6 @@
 # Dotfiles Manager Documentation
 
-A comprehensive cross-platform dotfiles manager built in Go with templating, variable system, and package management integration.
+A comprehensive cross-platform dotfiles manager built in Go with templating, variable system, and a variety of modules to be used in jobs.
 
 ## 📖 **Documentation Index**
 
@@ -12,24 +12,19 @@ A comprehensive cross-platform dotfiles manager built in Go with templating, var
 
 ### **Core Features**
 
-- [Variables System](variables.md) - Variable loading, processing, and management
-- [Templates System](templates.md) - Template processing and deployment
-- [Package Management](packages.md) - Cross-platform package installation and management
-- [Platform Detection](platforms.md) - OS, shell, and architecture detection
-
-### **Advanced Usage**
-
-- [Conditional Logic](conditionals.md) - Platform and environment-based conditions
-- [Custom Functions](functions.md) - Template functions and helpers
+- [Job Modules](modules.md) - Available modules for usage in jobs
+  - [Package Management](modules/packages.md) - Cross-platform package installation and management
+  - [File Management](modules/files.md) - File creation, modification, deletion and template management
+  - [Symlinks](modules/symlinks.md) - Symlink creation, and modification
 - [Import System](imports.md) - File imports and dependency management
+- [Variables System](variables.md) - Variable loading, processing, and management
+- [Platform Detection](platforms.md) - OS, shell, and architecture detection
+- [Condition Syntax](condition-syntax.md) - Jobs and Variables can have conditional logic
 - [Debugging & Troubleshooting](DEBUG.md) - Debug techniques and common issues
 
 ### **Reference**
 
 - [CLI Commands](cli-reference.md) - Complete command reference
-- [Configuration Reference](config-reference.md) - All configuration options
-- [Template Functions](template-functions.md) - Available template functions
-- [Error Codes](error-codes.md) - Error messages and solutions
 
 ### **Development**
 
@@ -43,21 +38,12 @@ A comprehensive cross-platform dotfiles manager built in Go with templating, var
 
 - **Get started quickly** → [Quick Start Guide](quickstart.md)
 - **Understand variables** → [Variables System](variables.md)
-- **Install packages automatically** → [Package Management](packages.md)
+- **Install packages automatically** → [Package Management](modules/packages.md)
+- **Manage symlinks** → [Symbolic Links](modules/symlinks.md)
+- **Manage files and/or template them** → [File Management](modules/files.md)
 - **Debug my configuration** → [Debugging Guide](DEBUG.md)
 - **See all CLI commands** → [CLI Reference](cli-reference.md)
-- **Create conditional configurations** → [Conditional Logic](conditionals.md)
-
-### **Common Tasks**
-
-| Task                            | Documentation                                       |
-| ------------------------------- | --------------------------------------------------- |
-| Initialize a new dotfiles repo  | [Quick Start Guide](quickstart.md#initialization)   |
-| Add platform-specific variables | [Variables System](variables.md#platform-variables) |
-| Create templates                | [Templates System](templates.md#creating-templates) |
-| Debug variable loading          | [DEBUG.md](DEBUG.md#variable-debugging)             |
-| Set up conditional imports      | [Import System](imports.md#conditional-imports)     |
-| Install packages automatically  | [Package Management](packages.md)                   |
+- **Create conditional configurations** → [Condition Syntax](condition-syntax.md)
 
 ## 🎯 **Key Concepts**
 
@@ -69,24 +55,6 @@ Variables provide data for templates and can be:
 - **Platform-specific** - Windows/macOS/Linux specific
 - **Environment-specific** - Work/personal/development specific
 - **Conditional** - Loaded based on conditions
-
-### **Templates**
-
-Templates are files that get processed with variables and deployed to target locations. They support:
-
-- Go template syntax
-- Custom functions for paths, conditions, etc.
-- Cross-platform path handling
-- Conditional deployment
-
-### **Import System**
-
-Files can import other files with:
-
-- Relative path support
-- Conditional imports
-- Circular dependency detection
-- Breadcrumb error tracking
 
 ## 🔍 **Quick Examples**
 
@@ -104,6 +72,8 @@ directories:
 
 ### **Template Usage**
 
+Files managed, and loaded with the files module.
+
 ```bash
 # templates/shell/.bashrc.tmpl
 export PROJECTS_DIR="{{ .directories.projects }}"
@@ -114,6 +84,8 @@ alias ll="ls -la"
 ```
 
 ### **Conditional Import**
+
+Both for jobs and variables imports can be conditional.
 
 ```yaml
 # variables/index.yaml
@@ -144,11 +116,11 @@ dotfiles variables trace user.name --raw
 # Show all variable sources
 dotfiles variables sources
 
-# Apply configuration
-dotfiles apply
-
 # Validate configuration
 dotfiles validate
+
+# Apply configuration
+dotfiles apply --dry-run
 
 # Show platform info
 dotfiles info
@@ -159,9 +131,3 @@ dotfiles info
 - **Issues**: Found a bug? [Report it](https://github.com/vleeuwenmenno/dotfiles-cp/issues)
 - **Questions**: Need help? Check [DEBUG.md](DEBUG.md) first
 - **Contributing**: Want to contribute? See [Contributing Guide](../CONTRIBUTING.md)
-
----
-
-**Version**: 1.0.0
-**Last Updated**: 2025-06-28
-**Project**: [github.com/vleeuwenmenno/dotfiles-cp](https://github.com/vleeuwenmenno/dotfiles-cp)
