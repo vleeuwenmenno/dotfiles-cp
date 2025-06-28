@@ -10,6 +10,7 @@ import (
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/logger"
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/modules"
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/modules/files"
+	"github.com/vleeuwenmenno/dotfiles-cp/internal/modules/packages"
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/modules/symlinks"
 
 	"github.com/spf13/cobra"
@@ -37,6 +38,10 @@ Examples:
 			registry := modules.NewModuleRegistry()
 			if err := registry.Register(files.New()); err != nil {
 				log.Error().Err(err).Msg("Failed to register files module")
+				os.Exit(1)
+			}
+			if err := registry.Register(packages.New()); err != nil {
+				log.Error().Err(err).Msg("Failed to register packages module")
 				os.Exit(1)
 			}
 			if err := registry.Register(symlinks.New()); err != nil {

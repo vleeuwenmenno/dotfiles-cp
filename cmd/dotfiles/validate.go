@@ -10,6 +10,7 @@ import (
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/jobs"
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/modules"
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/modules/files"
+	"github.com/vleeuwenmenno/dotfiles-cp/internal/modules/packages"
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/modules/symlinks"
 
 	"github.com/spf13/cobra"
@@ -164,6 +165,10 @@ This command performs all validation checks without making any changes to your s
 					registry := modules.NewModuleRegistry()
 					if err := registry.Register(files.New()); err != nil {
 						fmt.Printf("   ❌ Failed to register files module: %v\n", err)
+						errorCount++
+					}
+					if err := registry.Register(packages.New()); err != nil {
+						fmt.Printf("   ❌ Failed to register packages module: %v\n", err)
 						errorCount++
 					}
 					if err := registry.Register(symlinks.New()); err != nil {
