@@ -1,0 +1,51 @@
+# Example configuration demonstrating the new "only" feature for packages
+# This ensures packages are only installed through specific package managers
+
+tasks:
+  - name: Install development tools with restricted package managers
+    action: manage_packages
+    config:
+      packages:
+        # Install starship only through cargo or apt (no fallback to other managers)
+        - name: starship
+          only: ["cargo", "apt"]
+          state: present
+
+        # Install ripgrep only through cargo (will fail if cargo not available)
+        - name: ripgrep
+          only: ["cargo"]
+          state: present
+
+        # Install Node.js only through specific package managers
+        - name: nodejs
+          only: ["winget", "homebrew", "apt"]
+          managers:
+            winget: "OpenJS.NodeJS"
+            homebrew: "node"
+            apt: "nodejs"
+          state: present
+
+        # Install Git with preference (fallback allowed)
+        - name: git
+          prefer: ["winget", "homebrew", "apt"]
+          managers:
+            winget: "Git.Git"
+          state: present
+
+  - name: Install single package with only constraint
+    action: install_package
+    config:
+      name: fd-find
+      only: ["cargo", "apt"]
+      managers:
+        cargo: "fd-find"
+        apt: "fd-find"
+
+# Key differences:
+# - "only": Restricts package installation to specified managers only
+#           If none are available, the task fails with an error
+# - "prefer": Tries preferred managers first, but falls back to any available manager
+#             if none of the preferred ones are available
+#
+# Use "only" when you want strict control over which package manager is used
+# Use "prefer" when you want to express preference but allow fallbacks

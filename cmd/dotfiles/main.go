@@ -159,7 +159,8 @@ Use --check to only check for updates without installing.`,
 	// Add variables command
 	variablesCmd := createVariablesCommand()
 
-
+	// Add fetch command
+	fetchCmd := createFetchCommand()
 
 	// Add explain command
 	explainCmd := createExplainCommand()
@@ -175,7 +176,7 @@ Use --check to only check for updates without installing.`,
 	rootCmd.AddCommand(validateCmd)
 	rootCmd.AddCommand(updateCmd)
 	rootCmd.AddCommand(variablesCmd)
-
+	rootCmd.AddCommand(fetchCmd)
 	rootCmd.AddCommand(explainCmd)
 
 	// Execute the root command

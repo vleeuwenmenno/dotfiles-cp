@@ -25,6 +25,7 @@ type PackageConfig struct {
 	State           string            `json:"state"`             // "present" or "absent"
 	Managers        map[string]string `json:"managers"`          // package manager specific names
 	Prefer          []string          `json:"prefer"`            // preferred package manager order
+	Only            []string          `json:"only"`              // only allow these package managers (no fallback)
 	CheckSystemWide bool              `json:"check_system_wide"` // check if command is available system-wide before installing
 }
 
@@ -117,6 +118,26 @@ func (m *PackagesModule) validateSinglePackageTask(config map[string]interface{}
 		}
 	}
 
+	// Validate package manager restrictions if specified
+	if only, exists := config["only"]; exists {
+		if onlyList, ok := only.([]interface{}); ok {
+			for _, mgr := range onlyList {
+				if mgrStr, ok := mgr.(string); ok {
+					if !m.isValidPackageManager(mgrStr) {
+						return fmt.Errorf("invalid package manager: %s", mgrStr)
+					}
+				}
+			}
+		}
+	}
+
+	// Validate that both prefer and only are not specified together
+	if _, hasPrefer := config["prefer"]; hasPrefer {
+		if _, hasOnly := config["only"]; hasOnly {
+			return fmt.Errorf("cannot specify both 'prefer' and 'only' options")
+		}
+	}
+
 	return nil
 }
 
@@ -151,6 +172,39 @@ func (m *PackagesModule) validateMultiplePackagesTask(config map[string]interfac
 			stateStr, ok := state.(string)
 			if !ok || (stateStr != "present" && stateStr != "absent") {
 				return fmt.Errorf("package %d: state must be 'present' or 'absent'", i)
+			}
+		}
+
+		// Validate package manager preferences if specified
+		if prefer, exists := pkgConfig["prefer"]; exists {
+			if preferList, ok := prefer.([]interface{}); ok {
+				for _, mgr := range preferList {
+					if mgrStr, ok := mgr.(string); ok {
+						if !m.isValidPackageManager(mgrStr) {
+							return fmt.Errorf("package %d: invalid package manager: %s", i, mgrStr)
+						}
+					}
+				}
+			}
+		}
+
+		// Validate package manager restrictions if specified
+		if only, exists := pkgConfig["only"]; exists {
+			if onlyList, ok := only.([]interface{}); ok {
+				for _, mgr := range onlyList {
+					if mgrStr, ok := mgr.(string); ok {
+						if !m.isValidPackageManager(mgrStr) {
+							return fmt.Errorf("package %d: invalid package manager: %s", i, mgrStr)
+						}
+					}
+				}
+			}
+		}
+
+		// Validate that both prefer and only are not specified together
+		if _, hasPrefer := pkgConfig["prefer"]; hasPrefer {
+			if _, hasOnly := pkgConfig["only"]; hasOnly {
+				return fmt.Errorf("package %d: cannot specify both 'prefer' and 'only' options", i)
 			}
 		}
 	}
@@ -422,10 +476,20 @@ func (m *PackagesModule) ensurePackageState(pkg *PackageConfig, ctx *modules.Exe
 func (m *PackagesModule) selectPackageDriver(pkg *PackageConfig) (drivers.PackageDriver, string, error) {
 	log := logger.Get()
 
-	// Get the preferred driver using the registry
-	driver, err := m.driverRegistry.GetPreferredDriver(pkg.Prefer)
-	if err != nil {
-		return nil, "", err
+	var driver drivers.PackageDriver
+	var err error
+
+	// Use only constraint if specified, otherwise use prefer
+	if len(pkg.Only) > 0 {
+		driver, err = m.driverRegistry.GetOnlyDriver(pkg.Only)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to find required package manager for %s: %w", pkg.Name, err)
+		}
+	} else {
+		driver, err = m.driverRegistry.GetPreferredDriver(pkg.Prefer)
+		if err != nil {
+			return nil, "", err
+		}
 	}
 
 	packageName := m.getPackageNameForManager(pkg, driver.Name())
@@ -436,6 +500,7 @@ func (m *PackagesModule) selectPackageDriver(pkg *PackageConfig) (drivers.Packag
 		Str("selected_driver", driver.Name()).
 		Str("package_name", packageName).
 		Interface("preferences", pkg.Prefer).
+		Interface("only", pkg.Only).
 		Msg("Selected package driver")
 
 	return driver, packageName, nil
@@ -688,6 +753,12 @@ func (m *PackagesModule) ExplainAction(action string) (*modules.ActionDocumentat
 					Required:    false,
 					Description: "Preferred package manager order (e.g., [\"winget\", \"brew\"])",
 				},
+				{
+					Name:        "only",
+					Type:        "[]string",
+					Required:    false,
+					Description: "Only allow these package managers, no fallbacks (e.g., [\"cargo\", \"apt\"])",
+				},
 			},
 			Examples: []modules.ActionExample{
 				{
@@ -705,6 +776,13 @@ func (m *PackagesModule) ExplainAction(action string) (*modules.ActionDocumentat
 							"brew":   "node",
 							"apt":    "nodejs",
 						},
+					},
+				},
+				{
+					Description: "Install starship only through cargo or apt",
+					Config: map[string]interface{}{
+						"name": "starship",
+						"only": []string{"cargo", "apt"},
 					},
 				},
 			},
@@ -731,6 +809,12 @@ func (m *PackagesModule) ExplainAction(action string) (*modules.ActionDocumentat
 					Type:        "[]string",
 					Required:    false,
 					Description: "Preferred package manager order",
+				},
+				{
+					Name:        "only",
+					Type:        "[]string",
+					Required:    false,
+					Description: "Only allow these package managers, no fallbacks",
 				},
 			},
 			Examples: []modules.ActionExample{

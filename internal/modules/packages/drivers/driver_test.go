@@ -398,6 +398,42 @@ func TestDriverRegistry(t *testing.T) {
 			t.Errorf("Expected to get a fallback driver")
 		}
 	})
+
+	t.Run("GetOnlyDriver", func(t *testing.T) {
+		// Test with valid only constraints
+		onlyList := []string{"chocolatey", "winget"}
+		driver, err := registry.GetOnlyDriver(onlyList)
+		if err != nil {
+			t.Errorf("Expected to get only driver, got error: %v", err)
+		}
+		// Should get chocolatey since it's first in our registry
+		if driver.Name() != "chocolatey" {
+			t.Errorf("Expected only driver 'chocolatey', got '%s'", driver.Name())
+		}
+
+		// Test with nonexistent only constraints
+		onlyList = []string{"nonexistent1", "nonexistent2"}
+		_, err = registry.GetOnlyDriver(onlyList)
+		if err == nil {
+			t.Errorf("Expected error for nonexistent only drivers")
+		}
+
+		// Test with empty only list
+		_, err = registry.GetOnlyDriver([]string{})
+		if err == nil {
+			t.Errorf("Expected error for empty only list")
+		}
+
+		// Test with mixed valid/invalid only constraints
+		onlyList = []string{"nonexistent", "chocolatey"}
+		driver, err = registry.GetOnlyDriver(onlyList)
+		if err != nil {
+			t.Errorf("Expected to get only driver with mixed list, got error: %v", err)
+		}
+		if driver.Name() != "chocolatey" {
+			t.Errorf("Expected only driver 'chocolatey' from mixed list, got '%s'", driver.Name())
+		}
+	})
 }
 
 // TestChocolateySpecific tests Chocolatey-specific edge cases

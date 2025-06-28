@@ -302,3 +302,24 @@ func (r *DriverRegistry) GetPreferredDriver(preferences []string) (PackageDriver
 	// Return the first available driver (now guaranteed to be in consistent order)
 	return available[0], nil
 }
+
+// GetOnlyDriver returns a driver from the allowed list, with no fallback
+func (r *DriverRegistry) GetOnlyDriver(allowedManagers []string) (PackageDriver, error) {
+	if len(allowedManagers) == 0 {
+		return nil, fmt.Errorf("no package managers specified in 'only' list")
+	}
+
+	// Try each allowed manager in order
+	for _, managerName := range allowedManagers {
+		driver, err := r.GetDriver(managerName)
+		if err != nil {
+			continue
+		}
+		if driver.IsAvailable() {
+			return driver, nil
+		}
+	}
+
+	// No allowed manager is available
+	return nil, fmt.Errorf("none of the allowed package managers are available: %v", allowedManagers)
+}
