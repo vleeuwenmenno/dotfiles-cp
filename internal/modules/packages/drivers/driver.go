@@ -246,18 +246,12 @@ func (r *DriverRegistry) GetPreferredDriver(preferences []string) (PackageDriver
 	for _, preference := range preferences {
 		driver, err := r.GetDriver(preference)
 		if err != nil {
-			fmt.Printf("Warning: Preferred package manager '%s' not found, trying next option...\n", preference)
 			continue
 		}
 		if driver.IsAvailable() {
-			fmt.Printf("Using preferred package manager: %s\n", driver.Name())
 			return driver, nil
-		} else {
-			fmt.Printf("Warning: Preferred package manager '%s' is not available on this system, trying next option...\n", preference)
 		}
 	}
 
-	// Fall back to first available driver
-	fmt.Printf("Warning: None of the preferred package managers are available, falling back to: %s\n", available[0].Name())
 	return available[0], nil
 }

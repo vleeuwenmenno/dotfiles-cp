@@ -275,6 +275,21 @@ func (m *PackagesModule) executeManagePackages(task *config.Task, ctx *modules.E
 
 // gatherPackageStatus gathers current status information for a package
 func (m *PackagesModule) gatherPackageStatus(pkg *PackageConfig) (*PackageStatus, error) {
+	// Check if package is available system-wide first (if enabled)
+	if pkg.CheckSystemWide && pkg.State == "present" && !m.isWildcardPattern(pkg.Name) {
+		if m.isCommandAvailable(pkg.Name) {
+			return &PackageStatus{
+				Name:         pkg.Name,
+				PackageName:  pkg.Name,
+				Manager:      "system",
+				DesiredState: pkg.State,
+				CurrentState: "installed",
+				NeedsAction:  false,
+				ActionNeeded: "none",
+			}, nil
+		}
+	}
+
 	driver, packageName, err := m.selectPackageDriver(pkg)
 	if err != nil {
 		return &PackageStatus{
@@ -286,21 +301,6 @@ func (m *PackagesModule) gatherPackageStatus(pkg *PackageConfig) (*PackageStatus
 			NeedsAction:  false,
 			ActionNeeded: "none",
 		}, err
-	}
-
-	// Check if package is available system-wide first (if enabled)
-	if pkg.CheckSystemWide && pkg.State == "present" && !m.isWildcardPattern(pkg.Name) {
-		if m.isCommandAvailable(pkg.Name) {
-			return &PackageStatus{
-				Name:         pkg.Name,
-				PackageName:  packageName,
-				Manager:      "system",
-				DesiredState: pkg.State,
-				CurrentState: "installed",
-				NeedsAction:  false,
-				ActionNeeded: "none",
-			}, nil
-		}
 	}
 
 	// Handle wildcard patterns
