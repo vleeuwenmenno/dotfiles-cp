@@ -168,18 +168,15 @@ func (p *JobParser) createJobsFromObject(actionKey string, value map[string]inte
 }
 
 // stringToConfig converts a string value to appropriate config based on action
+// TODO: This should be made generic by having modules register their string conversion logic
 func (p *JobParser) stringToConfig(actionKey, value string) map[string]interface{} {
 	switch actionKey {
-	case "ensure_dir":
+	case "ensure_dir", "ensure_file":
 		return map[string]interface{}{"path": value}
-	case "ensure_file":
-		return map[string]interface{}{"path": value}
-	case "install":
-		return map[string]interface{}{"packages": []string{value}}
-	case "remove":
-		return map[string]interface{}{"packages": []string{value}}
+	case "install_package", "uninstall_package":
+		return map[string]interface{}{"name": value}
 	default:
-		// Generic fallback
+		// Generic fallback - modules should support this
 		return map[string]interface{}{"value": value}
 	}
 }
@@ -189,21 +186,6 @@ func (p *JobParser) itemToConfig(actionKey string, item interface{}) (map[string
 	switch v := item.(type) {
 	case string:
 		return p.stringToConfig(actionKey, v), nil
-
-	case []interface{}:
-		// Handle arrays like install: [["git", "vim"], ["curl"]]
-		if actionKey == "install" || actionKey == "remove" {
-			packages := make([]string, len(v))
-			for i, pkg := range v {
-				if pkgStr, ok := pkg.(string); ok {
-					packages[i] = pkgStr
-				} else {
-					return nil, fmt.Errorf("expected string package name, got %T", pkg)
-				}
-			}
-			return map[string]interface{}{"packages": packages}, nil
-		}
-		return nil, fmt.Errorf("arrays not supported for action '%s'", actionKey)
 
 	case map[string]interface{}:
 		return v, nil
@@ -225,73 +207,43 @@ func (p *JobParser) getSortedKeys(m map[string]interface{}) []string {
 
 // generateTaskID creates a descriptive task ID based on action and config
 func (p *JobParser) generateTaskID(actionKey string, config map[string]interface{}) string {
-	switch actionKey {
-	case "ensure_file":
-		if path, exists := config["path"]; exists {
-			if pathStr, ok := path.(string); ok {
-				return fmt.Sprintf("ensure_file: %s", pathStr)
-			}
+	// Generic task ID generation - try to find a meaningful identifier
+	if name, exists := config["name"]; exists {
+		if nameStr, ok := name.(string); ok {
+			return fmt.Sprintf("%s: %s", actionKey, nameStr)
 		}
-		return fmt.Sprintf("ensure_file_%d", p.orderCounter)
-
-	case "ensure_dir":
-		if path, exists := config["path"]; exists {
-			if pathStr, ok := path.(string); ok {
-				return fmt.Sprintf("ensure_dir: %s", pathStr)
-			}
-		}
-		return fmt.Sprintf("ensure_dir_%d", p.orderCounter)
-
-	case "symlink":
-		src, srcExists := config["src"]
-		dst, dstExists := config["dst"]
-		if srcExists && dstExists {
-			if srcStr, srcOk := src.(string); srcOk {
-				if dstStr, dstOk := dst.(string); dstOk {
-					return fmt.Sprintf("symlink: %s -> %s", srcStr, dstStr)
-				}
-			}
-		}
-		return fmt.Sprintf("symlink_%d", p.orderCounter)
-
-	case "copy":
-		src, srcExists := config["src"]
-		dst, dstExists := config["dst"]
-		if srcExists && dstExists {
-			if srcStr, srcOk := src.(string); srcOk {
-				if dstStr, dstOk := dst.(string); dstOk {
-					return fmt.Sprintf("copy: %s -> %s", srcStr, dstStr)
-				}
-			}
-		}
-		return fmt.Sprintf("copy_%d", p.orderCounter)
-
-	case "install":
-		if packages, exists := config["packages"]; exists {
-			if pkgSlice, ok := packages.([]string); ok && len(pkgSlice) > 0 {
-				if len(pkgSlice) == 1 {
-					return fmt.Sprintf("install: %s", pkgSlice[0])
-				}
-				return fmt.Sprintf("install: %d packages", len(pkgSlice))
-			}
-		}
-		return fmt.Sprintf("install_%d", p.orderCounter)
-
-	case "remove":
-		if packages, exists := config["packages"]; exists {
-			if pkgSlice, ok := packages.([]string); ok && len(pkgSlice) > 0 {
-				if len(pkgSlice) == 1 {
-					return fmt.Sprintf("remove: %s", pkgSlice[0])
-				}
-				return fmt.Sprintf("remove: %d packages", len(pkgSlice))
-			}
-		}
-		return fmt.Sprintf("remove_%d", p.orderCounter)
-
-	default:
-		// Fallback for unknown actions
-		return fmt.Sprintf("%s_%d", actionKey, p.orderCounter)
 	}
+
+	if path, exists := config["path"]; exists {
+		if pathStr, ok := path.(string); ok {
+			return fmt.Sprintf("%s: %s", actionKey, pathStr)
+		}
+	}
+
+	if value, exists := config["value"]; exists {
+		if valueStr, ok := value.(string); ok {
+			return fmt.Sprintf("%s: %s", actionKey, valueStr)
+		}
+	}
+
+	if src, exists := config["src"]; exists {
+		if dst, dstExists := config["dst"]; dstExists {
+			if srcStr, srcOk := src.(string); srcOk {
+				if dstStr, dstOk := dst.(string); dstOk {
+					return fmt.Sprintf("%s: %s -> %s", actionKey, srcStr, dstStr)
+				}
+			}
+		}
+	}
+
+	if packages, exists := config["packages"]; exists {
+		if pkgSlice, ok := packages.([]interface{}); ok && len(pkgSlice) > 0 {
+			return fmt.Sprintf("%s: %d packages", actionKey, len(pkgSlice))
+		}
+	}
+
+	// Fallback for any action
+	return fmt.Sprintf("%s_%d", actionKey, p.orderCounter)
 }
 
 // extractCondition extracts the condition from task config and moves it to the Condition field
@@ -305,91 +257,7 @@ func (p *JobParser) extractCondition(task *config.Task) {
 	}
 }
 
-// ValidateTask validates a task configuration
-func ValidateTask(task *config.Task) error {
-	if task.Action == "" {
-		return fmt.Errorf("task action is required")
-	}
 
-	if task.Config == nil {
-		return fmt.Errorf("task config is required")
-	}
-
-	// Action-specific validation
-	switch task.Action {
-	case "symlink":
-		return validateSymlinkTask(task.Config)
-	case "template":
-		return validateTemplateTask(task.Config)
-	case "ensure_dir":
-		return validateEnsureDirTask(task.Config)
-	case "install", "remove":
-		return validatePackageTask(task.Config)
-	}
-
-	return nil
-}
-
-// validateSymlinkTask validates symlink task configuration
-func validateSymlinkTask(config map[string]interface{}) error {
-	if _, exists := config["src"]; !exists {
-		return fmt.Errorf("symlink task requires 'src' field")
-	}
-	if _, exists := config["dst"]; !exists {
-		return fmt.Errorf("symlink task requires 'dst' field")
-	}
-	return nil
-}
-
-// validateTemplateTask validates template task configuration
-func validateTemplateTask(config map[string]interface{}) error {
-	if _, exists := config["src"]; !exists {
-		return fmt.Errorf("template task requires 'src' field")
-	}
-	if _, exists := config["dst"]; !exists {
-		return fmt.Errorf("template task requires 'dst' field")
-	}
-	return nil
-}
-
-// validateEnsureDirTask validates ensure_dir task configuration
-func validateEnsureDirTask(config map[string]interface{}) error {
-	if _, exists := config["path"]; !exists {
-		return fmt.Errorf("ensure_dir task requires 'path' field")
-	}
-	return nil
-}
-
-// validatePackageTask validates package task configuration
-func validatePackageTask(config map[string]interface{}) error {
-	if _, exists := config["packages"]; !exists {
-		return fmt.Errorf("package task requires 'packages' field")
-	}
-	return nil
-}
-
-// LoadJobsFromFile loads and parses jobs from a file
-func LoadJobsFromFile(filePath string) ([]*config.Task, error) {
-	jobsIndex, err := config.LoadJobsIndex(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load jobs index: %w", err)
-	}
-
-	parser := NewJobParser(filepath.Dir(filepath.Dir(filePath)))
-	tasks, err := parser.ParseJobsConfig(jobsIndex.Jobs)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse jobs: %w", err)
-	}
-
-	// Validate all tasks
-	for _, task := range tasks {
-		if err := ValidateTask(task); err != nil {
-			return nil, fmt.Errorf("task validation failed for '%s': %w", task.ID, err)
-		}
-	}
-
-	return tasks, nil
-}
 
 // LoadJobsFromFileWithConditions loads and parses jobs from a file, filtering by conditions
 func LoadJobsFromFileWithConditions(filePath string, variables map[string]interface{}) ([]*config.Task, error) {
@@ -403,11 +271,6 @@ func LoadJobsFromFileWithConditions(filePath string, variables map[string]interf
 	// Filter tasks based on conditions
 	var filteredTasks []*config.Task
 	for _, task := range allTasks {
-		// Validate task first
-		if err := ValidateTask(task); err != nil {
-			return nil, fmt.Errorf("task validation failed for '%s': %w", task.ID, err)
-		}
-
 		// Check condition
 		if task.Condition != "" {
 			shouldExecute, err := parser.evaluateCondition(task.Condition, variables)
@@ -415,7 +278,7 @@ func LoadJobsFromFileWithConditions(filePath string, variables map[string]interf
 				return nil, fmt.Errorf("failed to evaluate condition for task '%s': %w", task.ID, err)
 			}
 			if !shouldExecute {
-				continue // Skip this task
+				continue
 			}
 		}
 
@@ -426,6 +289,22 @@ func LoadJobsFromFileWithConditions(filePath string, variables map[string]interf
 }
 
 // evaluateCondition evaluates a condition string against variables
+//
+// Supported syntax:
+//   Simple comparisons: eq .Platform.OS "linux"
+//   Boolean operations: and (eq .Platform.OS "linux") (eq .Platform.Distro "Alpine Linux")
+//   Negation: not .Platform.IsElevated
+//   Complex nesting: and (or (eq .Platform.OS "linux") (eq .Platform.OS "darwin")) .Platform.IsRoot
+//
+// Available functions:
+//   Comparison: eq, ne, gt, lt
+//   Boolean: and, or, not
+//   String: contains, hasPrefix, hasSuffix, empty
+//   Lists: in (check if item is in list)
+//
+// IMPORTANT: Use parentheses around function calls in boolean operations!
+// CORRECT:   and (eq .Platform.OS "linux") (eq .Platform.Distro "Alpine")
+// INCORRECT: eq .Platform.OS "linux" and eq .Platform.Distro "Alpine"
 func (p *JobParser) evaluateCondition(condition string, variables map[string]interface{}) (bool, error) {
 	// Use the same template engine approach as the variable loader
 	tmpl := template.New("condition").Option("missingkey=zero").Funcs(template.FuncMap{
@@ -444,22 +323,68 @@ func (p *JobParser) evaluateCondition(condition string, variables map[string]int
 		"not": func(a bool) bool {
 			return !a
 		},
+		"contains": func(s, substr string) bool {
+			return strings.Contains(s, substr)
+		},
+		"hasPrefix": func(s, prefix string) bool {
+			return strings.HasPrefix(s, prefix)
+		},
+		"hasSuffix": func(s, suffix string) bool {
+			return strings.HasSuffix(s, suffix)
+		},
+		"in": func(item interface{}, list []interface{}) bool {
+			for _, v := range list {
+				if fmt.Sprintf("%v", item) == fmt.Sprintf("%v", v) {
+					return true
+				}
+			}
+			return false
+		},
+		"gt": func(a, b interface{}) bool {
+			return fmt.Sprintf("%v", a) > fmt.Sprintf("%v", b)
+		},
+		"lt": func(a, b interface{}) bool {
+			return fmt.Sprintf("%v", a) < fmt.Sprintf("%v", b)
+		},
+		"empty": func(s interface{}) bool {
+			return fmt.Sprintf("%v", s) == ""
+		},
 	})
 
 	// Wrap condition in template syntax
 	conditionTemplate := "{{" + condition + "}}"
 	tmpl, err := tmpl.Parse(conditionTemplate)
 	if err != nil {
-		return false, fmt.Errorf("failed to parse condition template: %w", err)
+		// Try to provide helpful suggestions for common syntax errors
+		if syntaxErr := p.validateAndSuggestConditionFix(condition); syntaxErr != nil {
+			return false, fmt.Errorf("condition syntax error: %w\n\nOriginal error: %v", syntaxErr, err)
+		}
+		return false, fmt.Errorf("failed to parse condition '%s': %w\n\nCondition syntax help:\n- Use parentheses around function calls: and (eq .Platform.OS \"linux\") (eq .Platform.Distro \"Alpine\")\n- Available functions: eq, ne, and, or, not", condition, err)
 	}
 
 	var result strings.Builder
 	if err := tmpl.Execute(&result, variables); err != nil {
-		return false, fmt.Errorf("failed to execute condition template: %w", err)
+		return false, fmt.Errorf("failed to evaluate condition '%s': %w\n\nCondition syntax help:\n- Use parentheses around function calls: and (eq .Platform.OS \"linux\") (eq .Platform.Distro \"Alpine\")\n- Available functions: eq, ne, and, or, not", condition, err)
 	}
 
 	resultStr := strings.TrimSpace(result.String())
 	return resultStr == "true", nil
+}
+
+// validateAndSuggestConditionFix checks for common condition syntax errors and suggests fixes
+func (p *JobParser) validateAndSuggestConditionFix(condition string) error {
+	// Check for common mistake: missing parentheses around function calls in boolean operations
+	if (strings.Contains(condition, " and ") || strings.Contains(condition, " or ")) &&
+		!strings.Contains(condition, "(") {
+		return fmt.Errorf("missing parentheses around function calls. Try: and (eq .Platform.OS \"linux\") (eq .Platform.Distro \"Alpine\")")
+	}
+
+	// Check for bare function calls without proper syntax
+	if strings.Contains(condition, "eq ") && strings.Count(condition, "\"") < 2 && !strings.Contains(condition, "(") {
+		return fmt.Errorf("eq function requires two arguments in quotes. Try: eq .Platform.OS \"linux\"")
+	}
+
+	return nil
 }
 
 // processImport processes a single import file with conditions

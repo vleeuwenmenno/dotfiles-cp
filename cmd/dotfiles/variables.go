@@ -446,29 +446,91 @@ func displayValueYAML(value interface{}, indent int) error {
 	switch v := value.(type) {
 	case map[string]interface{}:
 		for k, val := range v {
-			switch subVal := val.(type) {
-			case map[string]interface{}:
-				fmt.Printf("%s%s:\n", indentStr, k)
-				if err := displayValueYAML(subVal, indent+1); err != nil {
-					return err
-				}
-			case []interface{}:
-				fmt.Printf("%s%s:\n", indentStr, k)
-				for _, item := range subVal {
-					fmt.Printf("%s  - %v\n", indentStr, item)
-				}
-			default:
-				fmt.Printf("%s%s: %v\n", indentStr, k, val)
+			if err := displayKeyValue(k, val, indentStr, indent); err != nil {
+				return err
 			}
 		}
 	case []interface{}:
 		for _, item := range v {
-			fmt.Printf("%s- %v\n", indentStr, item)
+			if itemMap, ok := item.(map[string]interface{}); ok {
+				fmt.Printf("%s-\n", indentStr)
+				if err := displayValueYAML(itemMap, indent+1); err != nil {
+					return err
+				}
+			} else {
+				fmt.Printf("%s- %v\n", indentStr, item)
+			}
 		}
 	default:
+		// Check if it's a generic map (like map[interface{}]interface{})
+		if isMap(value) {
+			return displayGenericMap(value, indentStr, indent)
+		}
 		fmt.Printf("%s%v\n", indentStr, v)
 	}
 
+	return nil
+}
+
+func displayKeyValue(key string, value interface{}, indentStr string, indent int) error {
+	switch val := value.(type) {
+	case map[string]interface{}:
+		fmt.Printf("%s%s:\n", indentStr, key)
+		return displayValueYAML(val, indent+1)
+	case []interface{}:
+		fmt.Printf("%s%s:\n", indentStr, key)
+		for _, item := range val {
+			if itemMap, ok := item.(map[string]interface{}); ok {
+				fmt.Printf("%s  -\n", indentStr)
+				if err := displayValueYAML(itemMap, indent+2); err != nil {
+					return err
+				}
+			} else {
+				fmt.Printf("%s  - %v\n", indentStr, item)
+			}
+		}
+		return nil
+	default:
+		// Check if it's a generic map
+		if isMap(value) {
+			fmt.Printf("%s%s:\n", indentStr, key)
+			return displayGenericMap(value, indentStr+"  ", indent+1)
+		}
+		fmt.Printf("%s%s: %v\n", indentStr, key, value)
+		return nil
+	}
+}
+
+func isMap(value interface{}) bool {
+	switch value.(type) {
+	case map[interface{}]interface{}, map[string]string, map[string]int, map[string]bool:
+		return true
+	default:
+		return false
+	}
+}
+
+func displayGenericMap(value interface{}, indentStr string, indent int) error {
+	switch m := value.(type) {
+	case map[interface{}]interface{}:
+		for k, v := range m {
+			fmt.Printf("%s%v: %v\n", indentStr, k, v)
+		}
+	case map[string]string:
+		for k, v := range m {
+			fmt.Printf("%s%s: %s\n", indentStr, k, v)
+		}
+	case map[string]int:
+		for k, v := range m {
+			fmt.Printf("%s%s: %d\n", indentStr, k, v)
+		}
+	case map[string]bool:
+		for k, v := range m {
+			fmt.Printf("%s%s: %v\n", indentStr, k, v)
+		}
+	default:
+		fmt.Printf("%s%v\n", indentStr, value)
+	}
 	return nil
 }
 
