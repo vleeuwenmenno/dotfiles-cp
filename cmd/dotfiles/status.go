@@ -65,11 +65,19 @@ Use --verbose for detailed output, --json for machine-readable format.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			log := logger.Get()
 
-			// Get current working directory
-			cwd, err := os.Getwd()
+			// Find dotfiles root directory by locating config file
+			configPath, err := config.FindConfigFile()
+			var dotfilesDir string
 			if err != nil {
-				log.Error().Err(err).Msg("Failed to get current directory")
-				os.Exit(1)
+				// If no config found, fall back to current directory
+				dotfilesDir, err = os.Getwd()
+				if err != nil {
+					log.Error().Err(err).Msg("Failed to get current directory")
+					os.Exit(1)
+				}
+			} else {
+				// Use the directory containing the config file as dotfiles root
+				dotfilesDir = filepath.Dir(configPath)
 			}
 
 			// Get platform info
@@ -80,10 +88,10 @@ Use --verbose for detailed output, --json for machine-readable format.`,
 			}
 
 			// Get Git status
-			gitStatus := getGitStatus(cwd, !noFetch)
+			gitStatus := getGitStatus(dotfilesDir, !noFetch)
 
 			// Get configuration status
-			configStatus := getConfigStatus(cwd)
+			configStatus := getConfigStatus(dotfilesDir)
 
 			// Output results
 			if jsonOut {
@@ -148,12 +156,26 @@ func getGitStatus(dir string, shouldFetch bool) *GitStatus {
 }
 
 // getConfigStatus analyzes the dotfiles configuration status
-func getConfigStatus(dir string) *ConfigStatus {
+func getConfigStatus(dotfilesDir string) *ConfigStatus {
 	status := &ConfigStatus{}
 
-	// Find config file
-	configPath, err := config.FindConfigFile()
-	if err != nil {
+	// Look for config file in the dotfiles directory
+	configPaths := []string{
+		filepath.Join(dotfilesDir, "dotfiles.yaml"),
+		filepath.Join(dotfilesDir, "dotfiles.yml"),
+		filepath.Join(dotfilesDir, ".dotfiles.yaml"),
+		filepath.Join(dotfilesDir, ".dotfiles.yml"),
+	}
+
+	var configPath string
+	for _, path := range configPaths {
+		if utils.FileExists(path) {
+			configPath = path
+			break
+		}
+	}
+
+	if configPath == "" {
 		return status
 	}
 
@@ -166,8 +188,8 @@ func getConfigStatus(dir string) *ConfigStatus {
 		return status
 	}
 
-	// Get base directory
-	baseDir := filepath.Dir(configPath)
+	// Use dotfiles directory as base directory
+	baseDir := dotfilesDir
 
 	// Count managed files and templates
 	status.ManagedFiles, status.TemplateFiles = countManagedFiles(cfg, baseDir)
@@ -176,7 +198,7 @@ func getConfigStatus(dir string) *ConfigStatus {
 	status.ValidSymlinks, status.BrokenSymlinks, status.MissingSymlinks = checkSymlinkHealth(cfg, baseDir)
 
 	// Get last applied time (check for .dotfiles-last-applied file)
-	lastAppliedPath := filepath.Join(baseDir, ".dotfiles-last-applied")
+	lastAppliedPath := filepath.Join(dotfilesDir, ".dotfiles-last-applied")
 	if stat, err := os.Stat(lastAppliedPath); err == nil {
 		status.LastApplied = stat.ModTime()
 	}
