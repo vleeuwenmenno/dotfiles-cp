@@ -104,15 +104,7 @@ package management integration, and works seamlessly across Windows, macOS, and 
 	}
 
 	// Add status command
-	statusCmd := &cobra.Command{
-		Use:   "status",
-		Short: "Show status of dotfiles configuration",
-		Run: func(cmd *cobra.Command, args []string) {
-			log := logger.Get()
-			log.Info().Msg("Checking dotfiles status...")
-			log.Warn().Msg("Command not yet implemented")
-		},
-	}
+	statusCmd := createStatusCommand()
 
 	// Add validate command
 	validateCmd := createValidateCommand()

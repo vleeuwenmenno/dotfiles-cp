@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -290,4 +291,22 @@ func GetDetailedDiff(oldContent, newContent string, maxLines int) []string {
 	}
 
 	return diff
+}
+
+// ToJSONString converts any value to a pretty-printed JSON string
+func ToJSONString(v interface{}) string {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return fmt.Sprintf(`{"error": "failed to marshal JSON: %s"}`, err.Error())
+	}
+	return string(data)
+}
+
+// DirExists checks if a directory exists
+func DirExists(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return info.IsDir()
 }
