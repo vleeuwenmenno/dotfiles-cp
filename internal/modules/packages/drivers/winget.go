@@ -149,7 +149,7 @@ func (d *WingetDriver) InstallPackage(packageName string) error {
 		return nil
 	}
 
-	output, err := d.RunCommand("install", "--exact", "--silent", "--accept-package-agreements", "--accept-source-agreements", packageName)
+	output, err := d.RunCommand("install", "--silent", "--accept-package-agreements", "--accept-source-agreements", packageName)
 	if err != nil {
 		// Check if this is the "already installed" error
 		if exitError, ok := err.(*exec.ExitError); ok {
