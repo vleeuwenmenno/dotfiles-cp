@@ -667,10 +667,69 @@ func (m *FilesModule) processTemplateWithPathConversion(templateStr string, vari
 	}
 
 	renderedResult := result.String()
+
+	// Clean up empty lines from template conditionals when processing file content
+	if !convertPaths {
+		renderedResult = m.cleanupTemplateArtifacts(renderedResult)
+	}
+
 	if convertPaths {
 		// Ensure OS-specific path separators for file paths
 		return filepath.FromSlash(renderedResult), nil
 	}
 	// Return as-is for content (don't convert path separators)
 	return renderedResult, nil
+}
+
+// cleanupTemplateArtifacts removes empty lines that are artifacts from template conditionals
+func (m *FilesModule) cleanupTemplateArtifacts(content string) string {
+	lines := strings.Split(content, "\n")
+	var cleaned []string
+
+	// Track the context to better identify template artifacts
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		if trimmed == "" {
+			// Check if this empty line is likely a template artifact
+			isArtifact := false
+
+			// Look at surrounding lines for template patterns
+			if i > 0 && i < len(lines)-1 {
+				prevLine := strings.TrimSpace(lines[i-1])
+				nextLine := strings.TrimSpace(lines[i+1])
+
+				// If the empty line is between a section header and content, it's likely an artifact
+				// Pattern: [section] -> empty line -> content
+				if strings.HasPrefix(prevLine, "[") && strings.HasSuffix(prevLine, "]") &&
+				   nextLine != "" && !strings.HasPrefix(nextLine, "[") {
+					isArtifact = true
+				}
+
+				// If there are multiple consecutive empty lines, keep only one
+				if prevLine == "" {
+					isArtifact = true
+				}
+			}
+
+			// Remove leading empty lines
+			if i == 0 {
+				isArtifact = true
+			}
+
+			// Remove trailing empty lines (handled at the end)
+			if !isArtifact {
+				cleaned = append(cleaned, line)
+			}
+		} else {
+			cleaned = append(cleaned, line)
+		}
+	}
+
+	// Remove trailing empty lines
+	for len(cleaned) > 0 && strings.TrimSpace(cleaned[len(cleaned)-1]) == "" {
+		cleaned = cleaned[:len(cleaned)-1]
+	}
+
+	return strings.Join(cleaned, "\n")
 }
