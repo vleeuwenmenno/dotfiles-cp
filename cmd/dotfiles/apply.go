@@ -248,7 +248,7 @@ Use --show-diff with --dry-run to see detailed file content differences.`,
 	applyCmd.Flags().StringVar(&platform, "platform", "", "Override platform detection (windows, linux, darwin)")
 	applyCmd.Flags().StringVar(&shell, "shell", "", "Override shell detection (bash, zsh, powershell)")
 	applyCmd.Flags().StringSliceVarP(&environment, "env", "e", []string{}, "Set environment variables (KEY=VALUE)")
-	applyCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be done without making changes")
+	applyCmd.Flags().BoolVarP(&dryRun, "dry-run", "n", false, "Show what would be done without making changes")
 	applyCmd.Flags().BoolVar(&showDiff, "show-diff", false, "Show detailed diffs of file changes (use with --dry-run)")
 	applyCmd.Flags().BoolVar(&hideSkipped, "hide-skipped", false, "Hide skipped jobs from output")
 

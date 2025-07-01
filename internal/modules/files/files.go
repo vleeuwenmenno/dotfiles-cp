@@ -7,19 +7,23 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"text/template"
 
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/config"
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/modules"
+	"github.com/vleeuwenmenno/dotfiles-cp/internal/templating"
 	"github.com/vleeuwenmenno/dotfiles-cp/pkg/utils"
 )
 
 // FilesModule handles file and directory operations
-type FilesModule struct{}
+type FilesModule struct {
+	templateEngine *templating.TemplatingEngine
+}
 
 // New creates a new files module
 func New() *FilesModule {
-	return &FilesModule{}
+	return &FilesModule{
+		templateEngine: templating.NewTemplatingEngine("."),
+	}
 }
 
 // Name returns the module name
@@ -644,41 +648,24 @@ func (m *FilesModule) ListActions() []*modules.ActionDocumentation {
 	}
 }
 
-// processTemplate processes a template string with variables
+// processTemplate processes a template string with variables using the new templating engine
 func (m *FilesModule) processTemplate(templateStr string, variables map[string]interface{}) (string, error) {
 	return m.processTemplateWithPathConversion(templateStr, variables, true)
 }
 
+// processTemplateWithPathConversion processes a template string with optional path conversion
 func (m *FilesModule) processTemplateWithPathConversion(templateStr string, variables map[string]interface{}, convertPaths bool) (string, error) {
-	tmpl := template.New("files").Option("missingkey=zero").Funcs(template.FuncMap{
-		"pathJoin":  func(paths ...string) string { return filepath.Join(paths...) },
-		"pathSep":   func() string { return string(filepath.Separator) },
-		"pathClean": func(path string) string { return filepath.Clean(path) },
-	})
-
-	tmpl, err := tmpl.Parse(templateStr)
+	result, err := m.templateEngine.ProcessVariableTemplate(templateStr, variables)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse template: %w", err)
+		return "", err
 	}
 
-	var result strings.Builder
-	if err := tmpl.Execute(&result, variables); err != nil {
-		return "", fmt.Errorf("failed to execute template: %w", err)
-	}
-
-	renderedResult := result.String()
-
-	// Clean up empty lines from template conditionals when processing file content
-	if !convertPaths {
-		renderedResult = m.cleanupTemplateArtifacts(renderedResult)
-	}
-
+	// Convert paths to OS-specific format if requested
 	if convertPaths {
-		// Ensure OS-specific path separators for file paths
-		return filepath.FromSlash(renderedResult), nil
+		result = filepath.FromSlash(result)
 	}
-	// Return as-is for content (don't convert path separators)
-	return renderedResult, nil
+
+	return result, nil
 }
 
 // cleanupTemplateArtifacts removes empty lines that are artifacts from template conditionals

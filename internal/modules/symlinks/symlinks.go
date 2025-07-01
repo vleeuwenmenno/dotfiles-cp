@@ -4,20 +4,23 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
-	"text/template"
 
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/config"
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/modules"
+	"github.com/vleeuwenmenno/dotfiles-cp/internal/templating"
 	"github.com/vleeuwenmenno/dotfiles-cp/pkg/utils"
 )
 
 // SymlinksModule handles symlink creation and management
-type SymlinksModule struct{}
+type SymlinksModule struct {
+	templateEngine *templating.TemplatingEngine
+}
 
 // New creates a new symlinks module
 func New() *SymlinksModule {
-	return &SymlinksModule{}
+	return &SymlinksModule{
+		templateEngine: templating.NewTemplatingEngine("."),
+	}
 }
 
 // Name returns the module name
@@ -195,27 +198,15 @@ func (m *SymlinksModule) PlanTask(task *config.Task, ctx *modules.ExecutionConte
 	return plan, nil
 }
 
-// processTemplate processes a template string with variables
+// processTemplate processes a template string with variables using the new templating engine
 func (m *SymlinksModule) processTemplate(templateStr string, variables map[string]interface{}) (string, error) {
-	tmpl := template.New("symlink").Option("missingkey=zero").Funcs(template.FuncMap{
-		"pathJoin":  func(paths ...string) string { return filepath.Join(paths...) },
-		"pathSep":   func() string { return string(filepath.Separator) },
-		"pathClean": func(path string) string { return filepath.Clean(path) },
-	})
-
-	tmpl, err := tmpl.Parse(templateStr)
+	result, err := m.templateEngine.ProcessVariableTemplate(templateStr, variables)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse template: %w", err)
-	}
-
-	var result strings.Builder
-	if err := tmpl.Execute(&result, variables); err != nil {
-		return "", fmt.Errorf("failed to execute template: %w", err)
+		return "", err
 	}
 
 	// Ensure OS-specific path separators
-	renderedResult := result.String()
-	return filepath.FromSlash(renderedResult), nil
+	return filepath.FromSlash(result), nil
 }
 
 // ExplainAction returns documentation for a specific action

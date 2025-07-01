@@ -8,9 +8,9 @@ import (
 	"reflect"
 	"sort"
 	"strings"
-	"text/template"
 
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/platform"
+	"github.com/vleeuwenmenno/dotfiles-cp/internal/templating"
 	"github.com/vleeuwenmenno/dotfiles-cp/pkg/utils"
 	"gopkg.in/yaml.v3"
 )
@@ -82,11 +82,12 @@ func IsVariableConflictError(err error) (*VariableConflictError, bool) {
 
 // VariableLoader handles loading and merging variables from multiple sources
 type VariableLoader struct {
-	config   *Config
-	context  *ImportContext
-	sources  []*VariableSource
-	platform *platform.PlatformInfo
-	basePath string
+	config         *Config
+	context        *ImportContext
+	sources        []*VariableSource
+	platform       *platform.PlatformInfo
+	basePath       string
+	templateEngine *templating.TemplatingEngine
 }
 
 // VariableLoadOptions contains options for variable loading
@@ -108,11 +109,12 @@ func NewVariableLoader(config *Config, basePath string) (*VariableLoader, error)
 	context := NewImportContext(config, basePath)
 
 	return &VariableLoader{
-		config:   config,
-		context:  context,
-		sources:  make([]*VariableSource, 0),
-		platform: platformInfo,
-		basePath: basePath,
+		config:         config,
+		context:        context,
+		sources:        make([]*VariableSource, 0),
+		platform:       platformInfo,
+		basePath:       basePath,
+		templateEngine: templating.NewTemplatingEngine(basePath),
 	}, nil
 }
 
@@ -497,53 +499,14 @@ func (vl *VariableLoader) createTemplateContext(opts *VariableLoadOptions) map[s
 }
 
 // processTemplate processes a template string with the given context
-func (vl *VariableLoader) processTemplate(templateStr string, context map[string]interface{}) (string, error) {
-	// Create template with custom functions
-	tmpl := template.New("import").Option("missingkey=zero").Funcs(template.FuncMap{
-		"pathJoin":  func(paths ...string) string { return filepath.Join(paths...) },
-		"pathSep":   func() string { return string(filepath.Separator) },
-		"pathClean": func(path string) string { return filepath.Clean(path) },
-	})
-
-	tmpl, err := tmpl.Parse(templateStr)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse template: %w", err)
-	}
-
-	var result strings.Builder
-	if err := tmpl.Execute(&result, context); err != nil {
-		return "", fmt.Errorf("failed to execute template: %w", err)
-	}
-
-	// Ensure OS-specific path separators
-	renderedResult := result.String()
-	return filepath.FromSlash(renderedResult), nil
+// processTemplate processes a template string with variables using Pongo2
+func (vl *VariableLoader) processTemplate(templateStr string, variables map[string]interface{}) (string, error) {
+	return vl.templateEngine.ProcessVariableTemplate(templateStr, variables)
 }
 
-// evaluateCondition evaluates a condition string
+// evaluateCondition evaluates a condition string using the new templating engine
 func (vl *VariableLoader) evaluateCondition(condition string, context map[string]interface{}) (bool, error) {
-	// Simple condition evaluation for now
-	// This could be extended to support more complex expressions
-
-	tmpl := template.New("condition").Option("missingkey=zero").Funcs(template.FuncMap{
-		"pathJoin":  func(paths ...string) string { return filepath.Join(paths...) },
-		"pathSep":   func() string { return string(filepath.Separator) },
-		"pathClean": func(path string) string { return filepath.Clean(path) },
-	})
-
-	tmpl, err := tmpl.Parse("{{" + condition + "}}")
-	if err != nil {
-		return false, fmt.Errorf("failed to parse condition template: %w", err)
-	}
-
-	var result strings.Builder
-	if err := tmpl.Execute(&result, context); err != nil {
-		return false, fmt.Errorf("failed to execute condition template: %w", err)
-	}
-
-	// Convert result to boolean
-	resultStr := strings.TrimSpace(result.String())
-	return resultStr == "true" || resultStr == "1", nil
+	return vl.templateEngine.EvaluateCondition(condition, context)
 }
 
 // GetVariable gets a specific variable by key (supports dot notation)

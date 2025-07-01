@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"text/template"
 
 	"github.com/vleeuwenmenno/dotfiles-cp/internal/config"
+	"github.com/vleeuwenmenno/dotfiles-cp/internal/templating"
 	"github.com/vleeuwenmenno/dotfiles-cp/pkg/utils"
 )
 
@@ -17,6 +17,7 @@ type JobParser struct {
 	basePath     string
 	importChain  []string
 	currentFile  string
+	templateEngine *templating.TemplatingEngine
 }
 
 // NewJobParser creates a new job parser
@@ -26,6 +27,7 @@ func NewJobParser(basePath string) *JobParser {
 		basePath:     basePath,
 		importChain:  make([]string, 0),
 		currentFile:  "",
+		templateEngine: templating.NewTemplatingEngine(basePath),
 	}
 }
 
@@ -288,111 +290,36 @@ func LoadJobsFromFileWithConditions(filePath string, variables map[string]interf
 	return filteredTasks, nil
 }
 
-// evaluateCondition evaluates a condition string against variables
+// evaluateCondition evaluates a condition string against variables using the new templating engine
 //
-// Supported syntax:
-//   Simple comparisons: eq .Platform.OS "linux"
-//   Boolean operations: and (eq .Platform.OS "linux") (eq .Platform.Distro "Alpine Linux")
-//   Negation: not .Platform.IsElevated
-//   Complex nesting: and (or (eq .Platform.OS "linux") (eq .Platform.OS "darwin")) .Platform.IsRoot
-//
-// Available functions:
-//   Comparison: eq, ne, gt, lt
-//   Boolean: and, or, not
-//   String: contains, hasPrefix, hasSuffix, empty
-//   Lists: in (check if item is in list)
-//
-// IMPORTANT: Use parentheses around function calls in boolean operations!
-// CORRECT:   and (eq .Platform.OS "linux") (eq .Platform.Distro "Alpine")
-// INCORRECT: eq .Platform.OS "linux" and eq .Platform.Distro "Alpine"
+// New Expr syntax:
+//   Platform.OS == "linux"
+//   Platform.OS == "linux" && !Platform.IsElevated
+//   "docker" in Platform.Tags
+//   Platform.Version matches "^22\\."
 func (p *JobParser) evaluateCondition(condition string, variables map[string]interface{}) (bool, error) {
-	// Use the same template engine approach as the variable loader
-	tmpl := template.New("condition").Option("missingkey=zero").Funcs(template.FuncMap{
-		"eq": func(a, b interface{}) bool {
-			return fmt.Sprintf("%v", a) == fmt.Sprintf("%v", b)
-		},
-		"ne": func(a, b interface{}) bool {
-			return fmt.Sprintf("%v", a) != fmt.Sprintf("%v", b)
-		},
-		"and": func(a, b bool) bool {
-			return a && b
-		},
-		"or": func(a, b bool) bool {
-			return a || b
-		},
-		"not": func(a bool) bool {
-			return !a
-		},
-		"contains": func(s, substr string) bool {
-			return strings.Contains(s, substr)
-		},
-		"hasPrefix": func(s, prefix string) bool {
-			return strings.HasPrefix(s, prefix)
-		},
-		"hasSuffix": func(s, suffix string) bool {
-			return strings.HasSuffix(s, suffix)
-		},
-		"in": func(item interface{}, list []interface{}) bool {
-			for _, v := range list {
-				if fmt.Sprintf("%v", item) == fmt.Sprintf("%v", v) {
-					return true
-				}
-			}
-			return false
-		},
-		"gt": func(a, b interface{}) bool {
-			return fmt.Sprintf("%v", a) > fmt.Sprintf("%v", b)
-		},
-		"lt": func(a, b interface{}) bool {
-			return fmt.Sprintf("%v", a) < fmt.Sprintf("%v", b)
-		},
-		"empty": func(s interface{}) bool {
-			return fmt.Sprintf("%v", s) == ""
-		},
-	})
-
-	// Wrap condition in template syntax
-	conditionTemplate := "{{" + condition + "}}"
-	tmpl, err := tmpl.Parse(conditionTemplate)
+	result, err := p.templateEngine.EvaluateCondition(condition, variables)
 	if err != nil {
-		// Try to provide helpful suggestions for common syntax errors
-		if syntaxErr := p.validateAndSuggestConditionFix(condition); syntaxErr != nil {
-			return false, fmt.Errorf("condition syntax error: %w\n\nOriginal error: %v", syntaxErr, err)
-		}
-		return false, fmt.Errorf("failed to parse condition '%s': %w\n\nCondition syntax help:\n- Use parentheses around function calls: and (eq .Platform.OS \"linux\") (eq .Platform.Distro \"Alpine\")\n- Available functions: eq, ne, and, or, not", condition, err)
+		return false, p.enhanceJobError(err, fmt.Sprintf("condition evaluation: '%s'", condition))
 	}
-
-	var result strings.Builder
-	if err := tmpl.Execute(&result, variables); err != nil {
-		return false, fmt.Errorf("failed to evaluate condition '%s': %w\n\nCondition syntax help:\n- Use parentheses around function calls: and (eq .Platform.OS \"linux\") (eq .Platform.Distro \"Alpine\")\n- Available functions: eq, ne, and, or, not", condition, err)
-	}
-
-	resultStr := strings.TrimSpace(result.String())
-	return resultStr == "true", nil
+	return result, nil
 }
 
-// validateAndSuggestConditionFix checks for common condition syntax errors and suggests fixes
+// validateAndSuggestConditionFix provides helpful error messages for condition syntax
 func (p *JobParser) validateAndSuggestConditionFix(condition string) error {
-	// Check for common mistake: missing parentheses around function calls in boolean operations
-	if (strings.Contains(condition, " and ") || strings.Contains(condition, " or ")) &&
-		!strings.Contains(condition, "(") {
-		return fmt.Errorf("missing parentheses around function calls. Try: and (eq .Platform.OS \"linux\") (eq .Platform.Distro \"Alpine\")")
+	// Provide help for migrating from old syntax
+	if strings.Contains(condition, "eq ") || strings.Contains(condition, "and ") || strings.Contains(condition, "or ") {
+		return fmt.Errorf("legacy template syntax detected. New syntax examples:\n  Old: eq .Platform.OS \"linux\"\n  New: Platform.OS == \"linux\"\n  Old: and (eq .Platform.OS \"linux\") (not .Platform.IsElevated)\n  New: Platform.OS == \"linux\" && !Platform.IsElevated")
 	}
-
-	// Check for bare function calls without proper syntax
-	if strings.Contains(condition, "eq ") && strings.Count(condition, "\"") < 2 && !strings.Contains(condition, "(") {
-		return fmt.Errorf("eq function requires two arguments in quotes. Try: eq .Platform.OS \"linux\"")
-	}
-
 	return nil
 }
 
 // processImport processes a single import file with conditions
 func (p *JobParser) processImport(importFile config.ImportFile, variables map[string]interface{}) ([]*config.Task, error) {
-	// Process import path template
-	importPath, err := p.processTemplate(importFile.Path, variables)
+	// Process import path template using Pongo2
+	importPath, err := p.templateEngine.ProcessVariableTemplate(importFile.Path, variables)
 	if err != nil {
-		return nil, fmt.Errorf("failed to process import path template: %w", err)
+		return nil, p.enhanceJobError(err, fmt.Sprintf("import path template: '%s'", importFile.Path))
 	}
 
 	// Check if the processed path contains unresolved template placeholders
@@ -405,7 +332,7 @@ func (p *JobParser) processImport(importFile config.ImportFile, variables map[st
 	if importFile.Condition != "" {
 		shouldImport, err := p.evaluateCondition(importFile.Condition, variables)
 		if err != nil {
-			return nil, fmt.Errorf("failed to evaluate import condition: %w", err)
+			return nil, p.enhanceJobError(err, fmt.Sprintf("import condition for '%s': '%s'", importFile.Path, importFile.Condition))
 		}
 		if !shouldImport {
 			return []*config.Task{}, nil // Skip this import
@@ -434,33 +361,15 @@ func (p *JobParser) processImport(importFile config.ImportFile, variables map[st
 	return importedTasks, nil
 }
 
-// processTemplate processes a template string with variables
+// processTemplate processes a template string with variables using Pongo2
 func (p *JobParser) processTemplate(templateStr string, variables map[string]interface{}) (string, error) {
-	tmpl := template.New("import").Option("missingkey=zero").Funcs(template.FuncMap{
-		"pathJoin":  func(paths ...string) string { return filepath.Join(paths...) },
-		"pathSep":   func() string { return string(filepath.Separator) },
-		"pathClean": func(path string) string { return filepath.Clean(path) },
-		"eq": func(a, b interface{}) bool {
-			return fmt.Sprintf("%v", a) == fmt.Sprintf("%v", b)
-		},
-		"ne": func(a, b interface{}) bool {
-			return fmt.Sprintf("%v", a) != fmt.Sprintf("%v", b)
-		},
-	})
-
-	tmpl, err := tmpl.Parse(templateStr)
+	result, err := p.templateEngine.ProcessVariableTemplate(templateStr, variables)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse template: %w", err)
-	}
-
-	var result strings.Builder
-	if err := tmpl.Execute(&result, variables); err != nil {
-		return "", fmt.Errorf("failed to execute template: %w", err)
+		return "", p.enhanceJobError(err, fmt.Sprintf("template processing: '%s'", templateStr))
 	}
 
 	// Ensure OS-specific path separators
-	renderedResult := result.String()
-	return filepath.FromSlash(renderedResult), nil
+	return filepath.FromSlash(result), nil
 }
 
 // addToImportChain adds a file to the import chain to detect circular imports
@@ -501,4 +410,34 @@ func (p *JobParser) getRelativeSource() string {
 
 	// If we can't make it relative, just return the filename
 	return filepath.Base(p.currentFile)
+}
+
+// enhanceJobError provides better context for job-related errors
+func (p *JobParser) enhanceJobError(err error, context string) error {
+	var errorMsg strings.Builder
+
+	errorMsg.WriteString(fmt.Sprintf("job parsing error: %s\n", context))
+	errorMsg.WriteString(fmt.Sprintf("  error: %s\n", err.Error()))
+
+	if p.currentFile != "" {
+		errorMsg.WriteString(fmt.Sprintf("  source: %s\n", p.getRelativeSource()))
+	}
+
+	// Add helpful suggestions based on error type
+	errorStr := err.Error()
+	if strings.Contains(errorStr, "template") {
+		errorMsg.WriteString("\nTemplate debugging tips:\n")
+		errorMsg.WriteString("  • Check variable names are correct (no leading dots in Pongo2)\n")
+		errorMsg.WriteString("  • Verify all template brackets are properly closed\n")
+		errorMsg.WriteString("  • Use {{ variable }} for values, {% if %} for logic\n")
+	}
+
+	if strings.Contains(errorStr, "condition") {
+		errorMsg.WriteString("\nCondition syntax tips:\n")
+		errorMsg.WriteString("  • Use Platform.OS == \"linux\" (not eq .Platform.OS \"linux\")\n")
+		errorMsg.WriteString("  • Use && for AND, || for OR, ! for NOT\n")
+		errorMsg.WriteString("  • Use \"value\" in list to check membership\n")
+	}
+
+	return fmt.Errorf(errorMsg.String())
 }
