@@ -683,6 +683,10 @@ func (m *FilesModule) processTemplateWithPathConversion(templateStr string, vari
 
 // cleanupTemplateArtifacts removes empty lines that are artifacts from template conditionals
 func (m *FilesModule) cleanupTemplateArtifacts(content string) string {
+	// First, normalize line endings to Unix (LF) to avoid Windows CRLF issues in WSL/Linux
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	content = strings.ReplaceAll(content, "\r", "\n")
+
 	lines := strings.Split(content, "\n")
 	var cleaned []string
 
