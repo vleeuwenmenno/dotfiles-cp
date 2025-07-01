@@ -20,6 +20,7 @@ type PlatformInfo struct {
 	ConfigDir               string            `json:"config_dir"`
 	IsElevated              bool              `json:"is_elevated"`
 	IsRoot                  bool              `json:"is_root"`
+	IsWSL                   bool              `json:"is_wsl"`
 	Distro                  string            `json:"distro"`
 	DistroVersion           string            `json:"distro_version"`
 	DistroCodename          string            `json:"distro_codename"`
@@ -56,6 +57,9 @@ func GetPlatformInfo() (*PlatformInfo, error) {
 	// Check if running with elevated privileges
 	info.IsElevated = isElevated(info.OS)
 	info.IsRoot = (info.OS != "windows" && os.Geteuid() == 0)
+
+	// Check if running in WSL
+	info.IsWSL = isWSL(info.OS)
 
 	// Get system information
 	info.KernelVersion = getKernelVersion()
@@ -406,6 +410,42 @@ func getUnameInfo() map[string]string {
 	}
 
 	return info
+}
+
+// isWSL checks if the current process is running in Windows Subsystem for Linux
+func isWSL(osName string) bool {
+	// WSL only applies to Linux systems
+	if osName != "linux" {
+		return false
+	}
+
+	// Check for WSL environment variable
+	if os.Getenv("WSL_DISTRO_NAME") != "" {
+		return true
+	}
+
+	// Check /proc/version for Microsoft/WSL indicators
+	if content, err := os.ReadFile("/proc/version"); err == nil {
+		versionStr := strings.ToLower(string(content))
+		if strings.Contains(versionStr, "microsoft") || strings.Contains(versionStr, "wsl") {
+			return true
+		}
+	}
+
+	// Check kernel release information
+	if content, err := os.ReadFile("/proc/sys/kernel/osrelease"); err == nil {
+		releaseStr := strings.ToLower(string(content))
+		if strings.Contains(releaseStr, "microsoft") || strings.Contains(releaseStr, "wsl") {
+			return true
+		}
+	}
+
+	// Check for typical WSL mount point
+	if _, err := os.Stat("/mnt/c"); err == nil {
+		return true
+	}
+
+	return false
 }
 
 // GetPackageManagerInstallCommand returns the install command for a package manager

@@ -435,6 +435,7 @@ func (vl *VariableLoader) createTemplateContext(opts *VariableLoadOptions) map[s
 		"ConfigDir":               vl.platform.ConfigDir,
 		"IsElevated":              vl.platform.IsElevated,
 		"IsRoot":                  vl.platform.IsRoot,
+		"IsWSL":                   vl.platform.IsWSL,
 		"Distro":                  vl.platform.Distro,
 		"DistroVersion":           vl.platform.DistroVersion,
 		"DistroCodename":          vl.platform.DistroCodename,
