@@ -760,9 +760,7 @@ func (m *PackagesModule) planPackageChange(pkg *PackageConfig, ctx *modules.Exec
 
 	status, err := m.gatherPackageStatus(pkg)
 	if err != nil {
-		plan.WillSkip = true
-		plan.SkipReason = fmt.Sprintf("Cannot determine package status: %v", err)
-		return plan, nil
+		return nil, fmt.Errorf("cannot determine package status: %w", err)
 	}
 
 	if status.NeedsAction {
