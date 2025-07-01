@@ -10,6 +10,8 @@ import (
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/vm"
 	"github.com/flosch/pongo2/v6"
+
+	"github.com/vleeuwenmenno/dotfiles-cp/internal/templating/filters"
 )
 
 // TemplatingEngine provides hybrid templating:
@@ -46,11 +48,16 @@ func NewTemplatingEngine(basePath string) *TemplatingEngine {
 		loader = pongo2.MustNewLocalFileSystemLoader(".")
 	}
 
-	return &TemplatingEngine{
+	engine := &TemplatingEngine{
 		exprPrograms: make(map[string]*vm.Program),
 		pongo2Set:    pongo2.NewSet("dotfiles", loader),
 		basePath:     safeBasePath,
 	}
+
+	// Register custom filters
+	engine.registerFilters()
+
+	return engine
 }
 
 // EvaluateCondition evaluates job conditions using Expr
@@ -244,8 +251,17 @@ func max(a, b int) int {
 	return b
 }
 
+// registerFilters registers all custom filters with the template set
+func (e *TemplatingEngine) registerFilters() {
+	// Register 1Password filter
+	onePasswordFilter := filters.NewOnePasswordFilter()
+	onePasswordFilter.Register(e.pongo2Set)
+}
+
 // GetSyntaxHelp returns help text for users about syntax
 func (e *TemplatingEngine) GetSyntaxHelp() string {
+	onePasswordFilter := filters.NewOnePasswordFilter()
+
 	return `Templating Syntax:
 
 Job Conditions (Expr):
@@ -264,5 +280,6 @@ File Templates (Pongo2/Jinja2):
 Variable Templates (Pongo2/Jinja2):
   {{ Platform.OS }}-config
   {% if Platform.IsElevated %}admin{% else %}user{% endif %}
-`
+
+` + onePasswordFilter.GetSyntaxHelp()
 }
