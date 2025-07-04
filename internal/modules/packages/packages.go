@@ -632,6 +632,10 @@ func (m *PackagesModule) ensurePackageState(pkg *PackageConfig, ctx *modules.Exe
 func (m *PackagesModule) selectPackageDriver(pkg *PackageConfig) (drivers.PackageDriver, string, error) {
 	log := logger.Get()
 
+	if m.driverRegistry == nil {
+		return nil, "", fmt.Errorf("driver registry is not initialized")
+	}
+
 	var driver drivers.PackageDriver
 	var err error
 
@@ -646,6 +650,10 @@ func (m *PackagesModule) selectPackageDriver(pkg *PackageConfig) (drivers.Packag
 		if err != nil {
 			return nil, "", err
 		}
+	}
+
+	if driver == nil {
+		return nil, "", fmt.Errorf("no suitable package manager found for %s", pkg.Name)
 	}
 
 	packageName := m.getPackageNameForManager(pkg, driver.Name())

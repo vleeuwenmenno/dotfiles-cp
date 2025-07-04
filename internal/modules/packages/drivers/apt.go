@@ -224,6 +224,12 @@ func (d *AptDriver) RunCommandWithSudo(args ...string) (string, error) {
 
 // EnsureRepository ensures a PPA or repository is available
 func (d *AptDriver) EnsureRepository(repoName string) error {
+	// Check if add-apt-repository is available
+	_, err := exec.LookPath("add-apt-repository")
+	if err != nil {
+		return fmt.Errorf("add-apt-repository command not found. Please install software-properties-common package")
+	}
+
 	// Check if repository is already available
 	isAvailable, err := d.IsRepositoryAvailable(repoName)
 	if err != nil {
@@ -260,6 +266,12 @@ func (d *AptDriver) EnsureRepository(repoName string) error {
 
 // IsRepositoryAvailable checks if a PPA or repository is already available
 func (d *AptDriver) IsRepositoryAvailable(repoName string) (bool, error) {
+	// Check if add-apt-repository is available for repository management
+	_, err := exec.LookPath("add-apt-repository")
+	if err != nil {
+		return false, fmt.Errorf("add-apt-repository command not found. Please install software-properties-common package")
+	}
+
 	if strings.HasPrefix(repoName, "ppa:") {
 		return d.isPPAAvailable(repoName)
 	}
