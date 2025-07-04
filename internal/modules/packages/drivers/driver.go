@@ -34,6 +34,12 @@ type PackageDriver interface {
 
 	// GetAllInstalledPackages returns a map of all installed packages
 	GetAllInstalledPackages() (map[string]bool, error)
+
+	// EnsureRepository ensures a repository/bucket/tap is available
+	EnsureRepository(repoName string) error
+
+	// IsRepositoryAvailable checks if a repository/bucket/tap is already available
+	IsRepositoryAvailable(repoName string) (bool, error)
 }
 
 // BaseDriver provides common functionality for all package drivers
@@ -154,6 +160,20 @@ func (d *BaseDriver) IsPackageInstalledCached(packageName string, fetchAllPackag
 	// Return result for requested package
 	installed, exists := packages[packageName]
 	return exists && installed, nil
+}
+
+// EnsureRepository provides a default implementation that does nothing
+// Package drivers should override this if they support repositories
+func (d *BaseDriver) EnsureRepository(repoName string) error {
+	// Default implementation - no repository management
+	return fmt.Errorf("repository management not supported by %s driver", d.name)
+}
+
+// IsRepositoryAvailable provides a default implementation that returns false
+// Package drivers should override this if they support repositories
+func (d *BaseDriver) IsRepositoryAvailable(repoName string) (bool, error) {
+	// Default implementation - no repository management
+	return false, fmt.Errorf("repository management not supported by %s driver", d.name)
 }
 
 // DriverRegistry manages available package drivers
@@ -320,6 +340,5 @@ func (r *DriverRegistry) GetOnlyDriver(allowedManagers []string) (PackageDriver,
 		}
 	}
 
-	// No allowed manager is available
-	return nil, fmt.Errorf("none of the allowed package managers are available: %v", allowedManagers)
+	return nil, nil
 }

@@ -62,6 +62,19 @@ func (d *ScoopDriver) InstallPackage(packageName string) error {
 	if err != nil {
 		return fmt.Errorf("failed to install package %s via Scoop: %w\nOutput: %s", packageName, err, output)
 	}
+
+	// Check for common error patterns in Scoop output even when exit code is 0
+	outputLower := strings.ToLower(output)
+	if strings.Contains(outputLower, "couldn't find manifest") {
+		return fmt.Errorf("package %s not found in available Scoop buckets. You may need to add the appropriate bucket first (e.g., 'scoop bucket add extras')", packageName)
+	}
+	if strings.Contains(outputLower, "not found") && strings.Contains(outputLower, packageName) {
+		return fmt.Errorf("package %s not found in Scoop repositories", packageName)
+	}
+	if strings.Contains(outputLower, "error") || strings.Contains(outputLower, "failed") {
+		return fmt.Errorf("failed to install package %s via Scoop: %s", packageName, output)
+	}
+
 	return nil
 }
 
@@ -83,6 +96,11 @@ func (d *ScoopDriver) SearchPackage(packageName string) ([]string, error) {
 
 	var packages []string
 	lines := strings.Split(output, "\n")
+
+	// Check if no results found
+	if strings.Contains(strings.ToLower(output), "no matches found") {
+		return nil, fmt.Errorf("package %s not found in any available Scoop buckets. Try adding more buckets (e.g., 'scoop bucket add extras', 'scoop bucket add versions')", packageName)
+	}
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -155,6 +173,79 @@ func (d *ScoopDriver) GetPackageInfo(packageName string) (map[string]string, err
 // GetAllInstalledPackages returns a map of all installed packages
 func (d *ScoopDriver) GetAllInstalledPackages() (map[string]bool, error) {
 	return d.fetchAllInstalledPackages()
+}
+
+// EnsureRepository ensures a Scoop bucket is available
+func (d *ScoopDriver) EnsureRepository(bucketName string) error {
+	// Check if bucket is already added
+	output, err := d.RunCommand("bucket", "list")
+	if err != nil {
+		return fmt.Errorf("failed to list Scoop buckets: %w", err)
+	}
+
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		// Skip header lines
+		if strings.Contains(line, "Name") && strings.Contains(line, "Source") {
+			continue
+		}
+		if strings.Contains(line, "----") {
+			continue
+		}
+
+		// Parse the first column (bucket name)
+		parts := strings.Fields(line)
+		if len(parts) >= 1 && parts[0] == bucketName {
+			// Bucket is already added
+			return nil
+		}
+	}
+
+	// Add the bucket
+	output, err = d.RunCommand("bucket", "add", bucketName)
+	if err != nil {
+		return fmt.Errorf("failed to add Scoop bucket %s: %w\nOutput: %s", bucketName, err, output)
+	}
+
+	return nil
+}
+
+// IsRepositoryAvailable checks if a Scoop bucket is already available
+func (d *ScoopDriver) IsRepositoryAvailable(bucketName string) (bool, error) {
+	// Get list of available buckets
+	output, err := d.RunCommand("bucket", "list")
+	if err != nil {
+		return false, fmt.Errorf("failed to list Scoop buckets: %w", err)
+	}
+
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		// Skip header lines
+		if strings.Contains(line, "Name") && strings.Contains(line, "Source") {
+			continue
+		}
+		if strings.Contains(line, "----") {
+			continue
+		}
+
+		// Parse the first column (bucket name)
+		parts := strings.Fields(line)
+		if len(parts) >= 1 && parts[0] == bucketName {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 // IsAvailable overrides the base implementation to check platform compatibility

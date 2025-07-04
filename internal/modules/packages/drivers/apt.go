@@ -222,6 +222,89 @@ func (d *AptDriver) RunCommandWithSudo(args ...string) (string, error) {
 	return strings.TrimSpace(string(output)), err
 }
 
+// EnsureRepository ensures a PPA or repository is available
+func (d *AptDriver) EnsureRepository(repoName string) error {
+	// Check if repository is already available
+	isAvailable, err := d.IsRepositoryAvailable(repoName)
+	if err != nil {
+		return fmt.Errorf("failed to check repository availability: %w", err)
+	}
+
+	if isAvailable {
+		return nil // Repository already exists
+	}
+
+	// Add the repository
+	var output string
+	if strings.HasPrefix(repoName, "ppa:") {
+		// Handle PPA
+		output, err = d.RunCommandWithSudo("add-apt-repository", "-y", repoName)
+	} else {
+		// Handle regular repository (assume it's a complete sources.list line)
+		output, err = d.RunCommandWithSudo("add-apt-repository", "-y", repoName)
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to add repository %s: %w\nOutput: %s", repoName, err, output)
+	}
+
+	// Update package list after adding repository
+	_, updateErr := d.RunCommandWithSudo("update")
+	if updateErr != nil {
+		// Log warning but don't fail - the repository was added successfully
+		return fmt.Errorf("repository %s added but failed to update package list: %w", repoName, updateErr)
+	}
+
+	return nil
+}
+
+// IsRepositoryAvailable checks if a PPA or repository is already available
+func (d *AptDriver) IsRepositoryAvailable(repoName string) (bool, error) {
+	if strings.HasPrefix(repoName, "ppa:") {
+		return d.isPPAAvailable(repoName)
+	}
+	return d.isRepositoryInSources(repoName)
+}
+
+// isPPAAvailable checks if a PPA is already added
+func (d *AptDriver) isPPAAvailable(ppaName string) (bool, error) {
+	// Extract PPA identifier (remove "ppa:" prefix)
+	ppaId := strings.TrimPrefix(ppaName, "ppa:")
+
+	// Check in /etc/apt/sources.list.d/ for files containing this PPA
+	output, err := exec.Command("find", "/etc/apt/sources.list.d/", "-name", "*.list", "-exec", "grep", "-l", ppaId, "{}", ";").CombinedOutput()
+	if err != nil {
+		// If grep finds nothing, it returns exit code 1, which is normal
+		if strings.Contains(err.Error(), "exit status 1") {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to check PPA availability: %w", err)
+	}
+
+	// If we found files containing the PPA, it's available
+	return strings.TrimSpace(string(output)) != "", nil
+}
+
+// isRepositoryInSources checks if a repository line exists in sources
+func (d *AptDriver) isRepositoryInSources(repoLine string) (bool, error) {
+	// Check main sources.list
+	output, err := exec.Command("grep", "-h", repoLine, "/etc/apt/sources.list").CombinedOutput()
+	if err == nil && strings.TrimSpace(string(output)) != "" {
+		return true, nil
+	}
+
+	// Check sources.list.d directory
+	output, err = exec.Command("find", "/etc/apt/sources.list.d/", "-name", "*.list", "-exec", "grep", "-l", repoLine, "{}", ";").CombinedOutput()
+	if err != nil {
+		if strings.Contains(err.Error(), "exit status 1") {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to check repository in sources: %w", err)
+	}
+
+	return strings.TrimSpace(string(output)) != "", nil
+}
+
 // IsAvailable overrides the base implementation to check platform compatibility and sudo
 func (d *AptDriver) IsAvailable() bool {
 	// APT is only available on Linux
@@ -236,6 +319,12 @@ func (d *AptDriver) IsAvailable() bool {
 
 	// Check if sudo is available (needed for install/remove operations)
 	_, err := exec.LookPath("sudo")
+	if err != nil {
+		return false
+	}
+
+	// Check if add-apt-repository is available (needed for repository management)
+	_, err = exec.LookPath("add-apt-repository")
 	if err != nil {
 		return false
 	}

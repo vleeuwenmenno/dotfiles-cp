@@ -27,6 +27,7 @@ type PackageConfig struct {
 	Prefer          []string          `json:"prefer"`            // preferred package manager order
 	Only            []string          `json:"only"`              // only allow these package managers (no fallback)
 	CheckSystemWide bool              `json:"check_system_wide"` // check if command is available system-wide before installing
+
 }
 
 // PackageStatus represents the current status of a package
@@ -56,7 +57,7 @@ func (m *PackagesModule) Name() string {
 
 // ActionKeys returns the action keys this module handles
 func (m *PackagesModule) ActionKeys() []string {
-	return []string{"install_package", "uninstall_package", "manage_packages"}
+	return []string{"install_package", "uninstall_package", "manage_packages", "add_repo"}
 }
 
 // ValidateTask validates a package task configuration
@@ -66,6 +67,8 @@ func (m *PackagesModule) ValidateTask(task *config.Task) error {
 		return m.validateSinglePackageTask(task.Config)
 	case "manage_packages":
 		return m.validateMultiplePackagesTask(task.Config)
+	case "add_repo":
+		return m.validateAddRepoTask(task.Config)
 	default:
 		return fmt.Errorf("packages module does not handle action '%s'", task.Action)
 	}
@@ -80,6 +83,8 @@ func (m *PackagesModule) ExecuteTask(task *config.Task, ctx *modules.ExecutionCo
 		return m.executeUninstallPackage(task, ctx)
 	case "manage_packages":
 		return m.executeManagePackages(task, ctx)
+	case "add_repo":
+		return m.executeAddRepo(task, ctx)
 	default:
 		return fmt.Errorf("packages module does not handle action '%s'", task.Action)
 	}
@@ -94,6 +99,8 @@ func (m *PackagesModule) PlanTask(task *config.Task, ctx *modules.ExecutionConte
 		return m.planUninstallPackage(task, ctx)
 	case "manage_packages":
 		return m.planManagePackages(task, ctx)
+	case "add_repo":
+		return m.planAddRepo(task, ctx)
 	default:
 		return nil, fmt.Errorf("packages module does not handle action '%s'", task.Action)
 	}
@@ -251,7 +258,128 @@ func (m *PackagesModule) executeInstallPackage(task *config.Task, ctx *modules.E
 		pkg.CheckSystemWide = checkSystemWide.(bool)
 	}
 
+
+
 	return m.ensurePackageState(pkg, ctx)
+}
+
+// executeAddRepo adds a repository/bucket/tap to a package manager
+func (m *PackagesModule) executeAddRepo(task *config.Task, ctx *modules.ExecutionContext) error {
+	log := logger.Get()
+
+	// Get required repository name
+	repoName, exists := task.Config["name"]
+	if !exists {
+		return fmt.Errorf("name is required for add_repo action")
+	}
+
+	repo := repoName.(string)
+
+	// Parse only/prefer to determine which package manager to use
+	var driver drivers.PackageDriver
+	var err error
+
+	if only, exists := task.Config["only"]; exists {
+		if onlyList, ok := only.([]interface{}); ok {
+			onlyStrings := make([]string, len(onlyList))
+			for i, o := range onlyList {
+				onlyStrings[i] = o.(string)
+			}
+			driver, err = m.driverRegistry.GetOnlyDriver(onlyStrings)
+		} else {
+			return fmt.Errorf("only must be a list of strings")
+		}
+	} else if prefer, exists := task.Config["prefer"]; exists {
+		if preferList, ok := prefer.([]interface{}); ok {
+			preferStrings := make([]string, len(preferList))
+			for i, p := range preferList {
+				preferStrings[i] = p.(string)
+			}
+			driver, err = m.driverRegistry.GetPreferredDriver(preferStrings)
+		} else {
+			return fmt.Errorf("prefer must be a list of strings")
+		}
+	} else {
+		// Use default available driver
+		available := m.driverRegistry.GetAvailableDrivers()
+		if len(available) == 0 {
+			return fmt.Errorf("no package managers available on this system")
+		}
+		driver = available[0]
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to get package manager driver: %w", err)
+	}
+
+	log.Debug().
+		Str("manager", driver.Name()).
+		Str("repo", repo).
+		Bool("dry_run", ctx.DryRun).
+		Msg("Adding repository")
+
+	if ctx.DryRun {
+		fmt.Printf("Would add repository: %s (using %s)\n", repo, driver.Name())
+		return nil
+	}
+
+	fmt.Printf("Adding repository: %s (using %s)\n", repo, driver.Name())
+
+	// Add the repository
+	if err := driver.EnsureRepository(repo); err != nil {
+		return fmt.Errorf("failed to add repository %s using %s: %w", repo, driver.Name(), err)
+	}
+
+	return nil
+}
+
+// validateAddRepoTask validates an add_repo task configuration
+func (m *PackagesModule) validateAddRepoTask(config map[string]interface{}) error {
+	// Check for required name field
+	if _, exists := config["name"]; !exists {
+		return fmt.Errorf("name is required for add_repo action")
+	}
+
+	// Validate name type
+	if _, ok := config["name"].(string); !ok {
+		return fmt.Errorf("name must be a string")
+	}
+
+	// Validate only field if present
+	if only, exists := config["only"]; exists {
+		if onlyList, ok := only.([]interface{}); ok {
+			for _, manager := range onlyList {
+				if managerStr, ok := manager.(string); ok {
+					if !m.isValidPackageManager(managerStr) {
+						return fmt.Errorf("unsupported package manager in 'only': %s", managerStr)
+					}
+				} else {
+					return fmt.Errorf("all items in 'only' must be strings")
+				}
+			}
+		} else {
+			return fmt.Errorf("only must be a list of strings")
+		}
+	}
+
+	// Validate prefer field if present
+	if prefer, exists := config["prefer"]; exists {
+		if preferList, ok := prefer.([]interface{}); ok {
+			for _, manager := range preferList {
+				if managerStr, ok := manager.(string); ok {
+					if !m.isValidPackageManager(managerStr) {
+						return fmt.Errorf("unsupported package manager in 'prefer': %s", managerStr)
+					}
+				} else {
+					return fmt.Errorf("all items in 'prefer' must be strings")
+				}
+			}
+		} else {
+			return fmt.Errorf("prefer must be a list of strings")
+		}
+	}
+
+	return nil
 }
 
 // executeUninstallPackage uninstalls a single package
@@ -914,6 +1042,47 @@ func (m *PackagesModule) ExplainAction(action string) (*modules.ActionDocumentat
 				},
 			},
 		}, nil
+	case "add_repo":
+		return &modules.ActionDocumentation{
+			Action:      "add_repo",
+			Description: "Add a repository, bucket, or tap to a package manager",
+			Parameters: []modules.ActionParameter{
+				{
+					Name:        "name",
+					Type:        "string",
+					Required:    true,
+					Description: "Name of the repository/bucket/tap to add",
+				},
+				{
+					Name:        "only",
+					Type:        "[]string",
+					Required:    false,
+					Description: "Only use these package managers (no fallback)",
+				},
+				{
+					Name:        "prefer",
+					Type:        "[]string",
+					Required:    false,
+					Description: "Preferred package managers in order of preference",
+				},
+			},
+			Examples: []modules.ActionExample{
+				{
+					Description: "Add Scoop extras bucket",
+					Config: map[string]interface{}{
+						"name": "extras",
+						"only": []string{"scoop"},
+					},
+				},
+				{
+					Description: "Add Homebrew tap",
+					Config: map[string]interface{}{
+						"name": "homebrew/cask-fonts",
+						"prefer": []string{"homebrew"},
+					},
+				},
+			},
+		}, nil
 	default:
 		return nil, fmt.Errorf("unknown action: %s", action)
 	}
@@ -921,7 +1090,7 @@ func (m *PackagesModule) ExplainAction(action string) (*modules.ActionDocumentat
 
 // ListActions returns documentation for all actions supported by this module
 func (m *PackagesModule) ListActions() []*modules.ActionDocumentation {
-	actions := []string{"install_package", "uninstall_package", "manage_packages"}
+	actions := []string{"install_package", "uninstall_package", "manage_packages", "add_repo"}
 	docs := make([]*modules.ActionDocumentation, len(actions))
 
 	for i, action := range actions {
@@ -1041,4 +1210,69 @@ func (m *PackagesModule) uninstallWildcardPackages(driver drivers.PackageDriver,
 	}
 
 	return nil
+}
+
+// planAddRepo returns what adding a repository would do without executing it
+func (m *PackagesModule) planAddRepo(task *config.Task, ctx *modules.ExecutionContext) (*modules.TaskPlan, error) {
+	repoName := task.Config["name"].(string)
+
+	plan := &modules.TaskPlan{
+		TaskID:      task.ID,
+		Action:      task.Action,
+		Description: fmt.Sprintf("Add repository: %s", repoName),
+		Changes:     []string{},
+		WillSkip:    false,
+	}
+
+	// Determine which package manager will be used
+	var driver drivers.PackageDriver
+	var err error
+
+	if only, exists := task.Config["only"]; exists {
+		if onlyList, ok := only.([]interface{}); ok {
+			onlyStrings := make([]string, len(onlyList))
+			for i, o := range onlyList {
+				onlyStrings[i] = o.(string)
+			}
+			driver, err = m.driverRegistry.GetOnlyDriver(onlyStrings)
+		}
+	} else if prefer, exists := task.Config["prefer"]; exists {
+		if preferList, ok := prefer.([]interface{}); ok {
+			preferStrings := make([]string, len(preferList))
+			for i, p := range preferList {
+				preferStrings[i] = p.(string)
+			}
+			driver, err = m.driverRegistry.GetPreferredDriver(preferStrings)
+		}
+	} else {
+		available := m.driverRegistry.GetAvailableDrivers()
+		if len(available) > 0 {
+			driver = available[0]
+		}
+	}
+
+	if err != nil || driver == nil {
+		plan.WillSkip = true
+		plan.SkipReason = "No suitable package manager available"
+		return plan, nil
+	}
+
+	// Check if repository is already available
+	isAvailable, err := driver.IsRepositoryAvailable(repoName)
+	if err != nil {
+		// If we can't check availability, assume we need to add it
+		plan.Changes = append(plan.Changes, fmt.Sprintf("Add repository %s using %s (unable to verify current state)", repoName, driver.Name()))
+		return plan, nil
+	}
+
+	if isAvailable {
+		// Repository is already available, no action needed
+		plan.WillSkip = true
+		plan.SkipReason = fmt.Sprintf("Repository %s already available in %s", repoName, driver.Name())
+		return plan, nil
+	}
+
+	plan.Changes = append(plan.Changes, fmt.Sprintf("Add repository %s using %s", repoName, driver.Name()))
+
+	return plan, nil
 }
